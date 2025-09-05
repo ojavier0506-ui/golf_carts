@@ -4,8 +4,8 @@ import os
 
 app = Flask(__name__)
 
-# Lista de 40 carritos
-carts = [f"Cart {i+1}" for i in range(40)]
+# Lista de 40 carritos con nombres SunCart
+carts = [f"SunCart {i+1}" for i in range(40)]
 
 # Opciones de estado
 status_options = [
@@ -23,7 +23,7 @@ DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
 # Asegurarse de que el directorio exista
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Si existe el archivo, cargarlo. Si no, crear con valores iniciales
+# Cargar o crear archivo persistente
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
