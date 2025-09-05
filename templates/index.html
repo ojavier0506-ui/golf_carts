@@ -27,7 +27,24 @@
         }
 
         .fixed-summary h2 { margin: 0 20px 0 0; font-size: 1.2em; }
-        .fixed-summary .status-item { margin: 0 10px; font-size: 0.95em; cursor: pointer; color: blue; text-decoration: underline; }
+
+        /* Categories buttons */
+        .status-item { 
+            margin: 0 10px; 
+            font-size: 0.95em; 
+            cursor: pointer; 
+            background-color: #ff9800; /* Naranja */
+            color: white;              /* Texto blanco */
+            padding: 5px 12px;         /* Tamaño del "botón" */
+            border-radius: 12px;       /* Bordes redondeados */
+            text-decoration: none; 
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .status-item:hover {
+            background-color: #e68900; /* Naranja más oscuro al pasar el mouse */
+        }
 
         body { margin-top: 150px; }
 
@@ -50,18 +67,18 @@
         /* SAVE button at top */
         .save-top { 
             margin-left: 20px; 
-            padding: 10px 20px;          /* Más rectangular */
-            border-radius: 12px;          /* Bordes redondeados */
-            background-color: #28a745;    /* Verde */
-            color: white;                 /* Letra blanca */
-            border: none;                 /* Sin borde predeterminado */
-            cursor: pointer;              /* Mano al pasar el mouse */
+            padding: 10px 20px;          
+            border-radius: 12px;         
+            background-color: #28a745;    
+            color: white;                 
+            border: none;                 
+            cursor: pointer;              
             font-weight: bold;
             font-size: 1em;
         }
 
         .save-top:hover {
-            background-color: #218838;   /* Verde más oscuro al pasar el mouse */
+            background-color: #218838;   
         }
     </style>
 </head>
@@ -136,7 +153,6 @@
             })
             .then(response => {
                 alert("Changes have been saved successfully!");
-                // Optional: reload counts in summary bar without refreshing
                 location.reload();
             });
         }
