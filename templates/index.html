@@ -1,0 +1,81 @@
+""" ---------------------- index.html ----------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golf Cart Tracker</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+.cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
+textarea { width: 100%; height: 40px; }
+
+
+/* Fixed summary bar at top */
+.fixed-summary {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+background: #f4f4f4;
+padding: 10px 20px;
+border-bottom: 2px solid #ccc;
+z-index: 1000;
+display: flex;
+justify-content: space-around;
+align-items: center;
+}
+
+
+.fixed-summary h2 {
+margin: 0 20px 0 0;
+font-size: 1.2em;
+}
+
+
+.fixed-summary .status-item {
+margin: 0 10px;
+font-size: 0.95em;
+}
+
+
+body {
+margin-top: 100px; /* Push content down so it's not hidden behind the fixed summary */
+}
+</style>
+</head>
+<body>
+<h1>Golf Cart Tracker</h1>
+
+
+<!-- Fixed top summary bar -->
+<div class="fixed-summary">
+<h2>Status Summary:</h2>
+{% for status, count in counts.items() %}
+<div class="status-item"><strong>{{status}}</strong>: {{count}}</div>
+{% endfor %}
+</div>
+
+
+<form method="POST">
+{% for cart in carts %}
+<div class="cart">
+<h3>{{cart}}</h3>
+<label>Status: </label>
+<select name="status_{{cart}}">
+{% for option in status_options %}
+<option value="{{option}}" {% if cart_states[cart]['status'] == option %}selected{% endif %}>{{option}}</option>
+{% endfor %}
+</select>
+<br><br>
+<label>Comment:</label><br>
+<textarea name="comment_{{cart}}">{{cart_states[cart]['comment']}}</textarea>
+</div>
+{% endfor %}
+<button type="submit">Save Changes</button>
+</form>
+
+
+</body>
+</html>
+"""
