@@ -32,7 +32,7 @@ def add_cart():
     data = load_data()
     cart_id = len(data["carts"]) + 1
     new_cart = {
-        "name": f"SunCart {cart_id}",  # 👈 ahora se llaman SunCart
+        "name": f"SunCart {cart_id}",
         "items": []
     }
     data["carts"].append(new_cart)
