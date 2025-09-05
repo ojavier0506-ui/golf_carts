@@ -4,22 +4,17 @@ import os
 
 app = Flask(__name__)
 
-# Define cart list
 carts = [f"Cart {i+1}" for i in range(40)]
+status_options = ["Charging", "Ready for Walk up", "Being used by Guest", "Out of Service", "Other"]
 
-# Define status options
-status_options = [
-    "Charging",
-    "Ready for Walk up",
-    "Being used by Guest",
-    "Out of Service",
-    "Other"
-]
+# Ruta del archivo JSON en carpeta persistente
+PERSISTENT_PATH = '/persistent/data'
+DATA_FILE = os.path.join(PERSISTENT_PATH, 'data.json')
 
-# Path del archivo JSON donde se guardan los datos
-DATA_FILE = 'data.json'
+# Asegurarse de que la carpeta exista
+os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Cargar estados desde JSON si existe
+# Cargar datos si existe
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, 'r') as f:
         cart_states = json.load(f)
@@ -35,11 +30,10 @@ def index():
             cart_states[cart]["status"] = request.form.get(f"status_{cart}")
             cart_states[cart]["comment"] = request.form.get(f"comment_{cart}")
 
-        # Guardar cambios en JSON
+        # Guardar cambios en JSON persistente
         with open(DATA_FILE, 'w') as f:
             json.dump(cart_states, f)
 
-    # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
     for cart in carts:
         counts[cart_states[cart]["status"]] += 1
