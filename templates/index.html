@@ -46,9 +46,23 @@
         }
 
         .modal-content button { margin-top: 15px; padding: 5px 15px; }
-        
+
         /* SAVE button at top */
-        .save-top { margin-left: 20px; padding: 5px 10px; }
+        .save-top { 
+            margin-left: 20px; 
+            padding: 10px 20px;          /* Más rectangular */
+            border-radius: 12px;          /* Bordes redondeados */
+            background-color: #28a745;    /* Verde */
+            color: white;                 /* Letra blanca */
+            border: none;                 /* Sin borde predeterminado */
+            cursor: pointer;              /* Mano al pasar el mouse */
+            font-weight: bold;
+            font-size: 1em;
+        }
+
+        .save-top:hover {
+            background-color: #218838;   /* Verde más oscuro al pasar el mouse */
+        }
     </style>
 </head>
 <body>
