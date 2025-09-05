@@ -1,63 +1,57 @@
-from flask import Flask, request, jsonify, send_from_directory
-import os
+from flask import Flask, render_template, request
 import json
+import os
 
 app = Flask(__name__)
 
-# Carpeta para guardar datos persistentes en Render
-DATA_DIR = "/mnt/data"
-DATA_FILE = os.path.join(DATA_DIR, "carts.json")
-os.makedirs(DATA_DIR, exist_ok=True)  # ahora con permisos correctos
+# Lista de 40 carritos
+carts = [f"Cart {i+1}" for i in range(40)]
 
-# Cargar datos
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {"carts": []}
+# Opciones de estado
+status_options = [
+    "Charging",
+    "Ready for Walk up",
+    "Being used by Guest",
+    "Out of Service",
+    "Other"
+]
+
+# Ruta del archivo en el disco persistente
+PERSISTENT_PATH = "/persistent"
+DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
+
+# Asegurarse de que el directorio exista
+os.makedirs(PERSISTENT_PATH, exist_ok=True)
+
+# Si existe el archivo, cargarlo. Si no, crear con valores iniciales
+if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
-        return json.load(f)
-
-# Guardar datos
-def save_data(data):
+        cart_states = json.load(f)
+else:
+    cart_states = {cart: {"status": "Ready for Walk up", "comment": ""} for cart in carts}
     with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(cart_states, f)
 
-# API para obtener todos los carritos
-@app.route("/api/carts", methods=["GET"])
-def get_carts():
-    return jsonify(load_data())
-
-# API para agregar un carrito
-@app.route("/api/carts", methods=["POST"])
-def add_cart():
-    data = load_data()
-    cart_id = len(data["carts"]) + 1
-    new_cart = {
-        "name": f"SunCart {cart_id}",
-        "items": []
-    }
-    data["carts"].append(new_cart)
-    save_data(data)
-    return jsonify(new_cart), 201
-
-# API para agregar un item a un carrito
-@app.route("/api/carts/<int:cart_id>/items", methods=["POST"])
-def add_item(cart_id):
-    data = load_data()
-    if cart_id < 1 or cart_id > len(data["carts"]):
-        return jsonify({"error": "Cart not found"}), 404
-    item = request.json
-    data["carts"][cart_id - 1]["items"].append(item)
-    save_data(data)
-    return jsonify(data["carts"][cart_id - 1])
-
-# Servir HTML
-@app.route("/", methods=["GET"])
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return send_from_directory("static", "index.html")
+    global cart_states
 
-@app.route("/<path:path>")
-def static_files(path):
-    return send_from_directory("static", path)
+    if request.method == 'POST':
+        for cart in carts:
+            cart_states[cart]["status"] = request.form.get(f"status_{cart}")
+            cart_states[cart]["comment"] = request.form.get(f"comment_{cart}")
+
+        # Guardar siempre en el archivo persistente
+        with open(DATA_FILE, "w") as f:
+            json.dump(cart_states, f)
+
+    # Contar carritos en cada categoría
+    counts = {option: 0 for option in status_options}
+    for cart in carts:
+        counts[cart_states[cart]["status"]] += 1
+
+    return render_template("index.html", carts=carts, status_options=status_options,
+                           cart_states=cart_states, counts=counts)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
