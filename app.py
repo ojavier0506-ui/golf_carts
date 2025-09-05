@@ -4,10 +4,10 @@ import json
 
 app = Flask(__name__)
 
-# Carpeta para guardar datos persistentes
-DATA_DIR = "/data"
+# Carpeta para guardar datos persistentes en Render
+DATA_DIR = "/mnt/data"
 DATA_FILE = os.path.join(DATA_DIR, "carts.json")
-os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)  # ahora con permisos correctos
 
 # Cargar datos
 def load_data():
