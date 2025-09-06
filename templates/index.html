@@ -1,45 +1,110 @@
-body { font-family: Arial, sans-serif; margin: 20px; }
-.cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
-textarea { width: 100%; height: 40px; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SunCart Tracker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        textarea { width: 100%; height: 40px; }
 
-.fixed-summary {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #f4f4f4;
-    padding: 10px 20px;
-    border-bottom: 2px solid #ccc;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-.fixed-summary h2 { margin: 0; font-size: 1.2em; }
-.save-btn {
-    background-color: green;
-    color: white;
-    border-radius: 8px;
-    padding: 8px 16px;
-    border: none;
-    cursor: pointer;
-}
-.history-btn {
-    background-color: orange;
-    color: white;
-    border-radius: 8px;
-    padding: 8px 16px;
-    border: none;
-    cursor: pointer;
-}
-.status-btn {
-    background-color: orange;
-    color: white;
-    border-radius: 8px;
-    padding: 5px 10px;
-    border: none;
-    cursor: pointer;
-}
+        /* Barra fija de resumen */
+        .fixed-summary {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #f4f4f4;
+            padding: 10px 20px;
+            border-bottom: 2px solid #ccc;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
 
-#message { color: green; font-weight: bold; }
+        .fixed-summary h2 { margin: 0; font-size: 1.2em; }
+
+        /* Botones */
+        .save-btn { background-color: green; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
+        .history-btn { background-color: orange; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
+        .status-btn { background-color: orange; color: white; border-radius: 8px; padding: 5px 10px; border: none; cursor: pointer; }
+
+        #message { color: green; font-weight: bold; }
+
+        body { margin-top: 120px; } /* espacio para la barra fija */
+    </style>
+</head>
+<body>
+
+    <!-- Barra de resumen fija -->
+    <div class="fixed-summary">
+        <h2>Status Summary:</h2>
+        {% for status, count in counts.items() %}
+            <button class="status-btn" onclick="showCarts('{{status}}')">{{status}}: {{count}}</button>
+        {% endfor %}
+        <button class="save-btn" onclick="document.getElementById('cartForm').submit();">SAVE</button>
+        <button class="history-btn" onclick="openHistory()">History</button>
+    </div>
+
+    <p id="message">{{ message }}</p>
+
+    <form method="POST" id="cartForm">
+        {% for cart in carts %}
+            <div class="cart">
+                <h3>{{cart}}</h3>
+                <label>Status: </label>
+                <select name="status_{{cart}}">
+                    {% for option in status_options %}
+                        <option value="{{option}}" {% if cart_states[cart]['status'] == option %}selected{% endif %}>{{option}}</option>
+                    {% endfor %}
+                </select>
+                <br><br>
+                <label>Comment:</label><br>
+                <textarea name="comment_{{cart}}">{{cart_states[cart]['comment']}}</textarea>
+            </div>
+        {% endfor %}
+    </form>
+
+    <script>
+        function showCarts(status) {
+            let cartsInStatus = [];
+            {% for cart in carts %}
+                if ("{{cart_states[cart]['status']}}" === status) {
+                    cartsInStatus.push("{{cart}}");
+                }
+            {% endfor %}
+            alert("SunCarts " + status + ":\n" + cartsInStatus.join(", "));
+        }
+
+        function openHistory() {
+            let cart = prompt("Enter SunCart name (e.g., SunCart 1):");
+            let date = prompt("Enter date (YYYY-MM-DD):");
+            if (!cart || !date) return;
+            
+            fetch('/get_history', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'cart=' + encodeURIComponent(cart) + '&date=' + encodeURIComponent(date)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else if (data.length === 0) {
+                    alert("No changes for this date.");
+                } else {
+                    let msg = "History for " + cart + " on " + date + ":\n";
+                    data.forEach(item => {
+                        msg += item.time + " - " + item.status + " - " + item.comment + "\n";
+                    });
+                    alert(msg);
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
