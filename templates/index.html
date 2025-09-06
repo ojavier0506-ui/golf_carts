@@ -3,52 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SunCart Tracker</title>
-    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css' rel='stylesheet' />
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js'></script>
+    <title>Golf Cart Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
         textarea { width: 100%; height: 40px; }
-
-        /* Barra fija de resumen */
         .fixed-summary {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: #f4f4f4;
-            padding: 10px 20px;
-            border-bottom: 2px solid #ccc;
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+            position: fixed; top: 0; left: 0; right: 0; background: #f4f4f4;
+            padding: 10px 20px; border-bottom: 2px solid #ccc; z-index: 1000;
+            display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
         }
         .fixed-summary h2 { margin: 0; font-size: 1.2em; }
-        .status-item { background-color: orange; color: white; padding: 5px 10px; border-radius: 8px; cursor: pointer; }
-
         .save-btn { background-color: green; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
         .history-btn { background-color: skyblue; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
-
-        #historyPanel { display: none; margin-top: 120px; }
-        #calendar { max-width: 900px; margin-top: 20px; }
-        #historyResult { background:#eee; padding:10px; margin-top:10px; white-space: pre-wrap; }
-        body { margin-top: 120px; }
+        .status-btn { background-color: orange; color: white; border-radius: 8px; padding: 5px 10px; border: none; cursor: pointer; }
+        #message { color: green; font-weight: bold; margin-left:10px; }
+        #history-container { display:none; margin-top:80px; border:1px solid #ccc; padding:10px; border-radius:5px; }
     </style>
 </head>
 <body>
-    <h1>SunCart Tracker</h1>
+    <h1>Golf Cart Tracker</h1>
 
-    <!-- Barra de resumen fija -->
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
-            <div class="status-item" onclick="alertStatus('{{status}}')">{{status}}: {{count}}</div>
+            <div class="status-btn" onclick="alertStatus('{{status}}')">{{status}}: {{count}}</div>
         {% endfor %}
         <button class="save-btn" onclick="saveChanges()">SAVE</button>
         <button class="history-btn" onclick="toggleHistory()">History</button>
+        <span id="message"></span>
+    </div>
+
+    <div id="history-container">
+        <label>Select SunCart:</label>
+        <select id="history-cart">
+            {% for cart in carts %}
+                <option value="{{cart}}">{{cart}}</option>
+            {% endfor %}
+        </select>
+        <button onclick="loadCalendar()">Search</button>
+        <div id="calendar"></div>
     </div>
 
     <form id="cartForm">
@@ -68,71 +64,57 @@
         {% endfor %}
     </form>
 
-    <!-- Panel de historial -->
-    <div id="historyPanel">
-        <label>Select SunCart:</label>
-        <select id="historyCart" onchange="loadCalendar()">
-            <option value="">--Select--</option>
-            {% for cart in carts %}
-                <option value="{{cart}}">{{cart}}</option>
-            {% endfor %}
-        </select>
-        <div id="calendar"></div>
-        <pre id="historyResult"></pre>
-    </div>
+<script>
+const carts = {{ carts|tojson }};
+const status_options = {{ status_options|tojson }};
 
-    <script>
-        function alertStatus(status) {
-            let carts = [];
-            {% raw %}
-            for (let cart of {{ carts | tojson }}) {
-                let sel = document.querySelector('[name="status_' + cart + '"]');
-                if(sel && sel.value === status) carts.push(cart);
-            }
-            {% endraw %}
-            alert(`SunCarts ${status}: \n` + carts.join(", "));
-        }
+function saveChanges() {
+    const formData = new FormData(document.getElementById('cartForm'));
+    fetch("/", { method: "POST", body: formData })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('message').innerText = data.message;
+            setTimeout(()=>{document.getElementById('message').innerText = "";}, 2000);
+        });
+}
 
-        function saveChanges() {
-            let formData = new FormData(document.getElementById('cartForm'));
-            fetch("/", {method: "POST", body: formData})
-            .then(res => res.json())
-            .then(data => alert(data.message));
-        }
+function toggleHistory() {
+    const container = document.getElementById('history-container');
+    container.style.display = container.style.display === "none" ? "block" : "none";
+}
 
-        function toggleHistory() {
-            let panel = document.getElementById('historyPanel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
+function alertStatus(status) {
+    const selectedCarts = [];
+    {% for cart in carts %}
+        if ("{{cart_states[cart]['status']}}" === status) selectedCarts.push("{{cart}}");
+    {% endfor %}
+    alert(status + " SunCarts:\n" + (selectedCarts.length ? selectedCarts.join(", ") : "No SunCarts"));
+}
 
-        let calendar;
-        function loadCalendar() {
-            let cart = document.getElementById('historyCart').value;
-            if (!cart) return;
-
-            fetch('/get_cart_history_events', {
-                method: 'POST',
-                headers: {'Content-Type':'application/x-www-form-urlencoded'},
-                body: 'cart=' + encodeURIComponent(cart)
-            })
-            .then(res => res.json())
-            .then(events => {
-                if (calendar) calendar.destroy();
-                let calendarEl = document.getElementById('calendar');
-                calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'dayGridMonth',
-                    events: events,
-                    eventClick: function(info) {
-                        let time = info.event.start.toISOString().replace("T", " ").substring(0,19);
-                        let status = info.event.title;
-                        let comment = info.event.extendedProps.comment;
-                        document.getElementById('historyResult').textContent =
-                            `Time: ${time}\nStatus: ${status}\nComment: ${comment}`;
-                    }
-                });
-                calendar.render();
+function loadCalendar() {
+    const cart = document.getElementById('history-cart').value;
+    fetch(`/history/${cart}`)
+        .then(res => res.json())
+        .then(events => {
+            const formattedEvents = events.map(e => ({
+                title: e.status + (e.comment ? " ("+e.comment+")" : ""),
+                start: e.datetime.split(" ")[0],
+                allDay: true
+            }));
+            const calendarEl = document.getElementById('calendar');
+            calendarEl.innerHTML = "";
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                events: formattedEvents,
+                dateClick: function(info) {
+                    const dayEvents = formattedEvents.filter(ev => ev.start === info.dateStr);
+                    alert(dayEvents.length ? dayEvents.map(ev => ev.title).join("\n") : "No Data");
+                }
             });
-        }
-    </script>
+            calendar.render();
+        });
+}
+</script>
+
 </body>
 </html>
