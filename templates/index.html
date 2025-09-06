@@ -4,47 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Golf Cart Tracker</title>
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
         textarea { width: 100%; height: 40px; }
         .fixed-summary {
-            position: fixed; top: 0; left: 0; right: 0; background: #f4f4f4;
-            padding: 10px 20px; border-bottom: 2px solid #ccc; z-index: 1000;
-            display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #f4f4f4;
+            padding: 10px 20px;
+            border-bottom: 2px solid #ccc;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .fixed-summary h2 { margin: 0; font-size: 1.2em; }
         .save-btn { background-color: green; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
-        .history-btn { background-color: skyblue; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
-        .status-btn { background-color: orange; color: white; border-radius: 8px; padding: 5px 10px; border: none; cursor: pointer; }
-        #message { color: green; font-weight: bold; margin-left:10px; }
-        #history-container { display:none; margin-top:80px; border:1px solid #ccc; padding:10px; border-radius:5px; }
+        .history-btn { background-color: deepskyblue; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
+        #message { color: green; font-weight: bold; margin-left: 20px; }
+        body { margin-top: 120px; }
     </style>
 </head>
 <body>
-    <h1>Golf Cart Tracker</h1>
-
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
-            <div class="status-btn" onclick="alertStatus('{{status}}')">{{status}}: {{count}}</div>
+            <div class="status-item"><strong>{{status}}</strong>: {{count}}</div>
         {% endfor %}
         <button class="save-btn" onclick="saveChanges()">SAVE</button>
         <button class="history-btn" onclick="toggleHistory()">History</button>
         <span id="message"></span>
-    </div>
-
-    <div id="history-container">
-        <label>Select SunCart:</label>
-        <select id="history-cart">
-            {% for cart in carts %}
-                <option value="{{cart}}">{{cart}}</option>
-            {% endfor %}
-        </select>
-        <button onclick="loadCalendar()">Search</button>
-        <div id="calendar"></div>
     </div>
 
     <form id="cartForm">
@@ -64,57 +57,56 @@
         {% endfor %}
     </form>
 
-<script>
-const carts = {{ carts|tojson }};
-const status_options = {{ status_options|tojson }};
+    <div id="historySection" style="display:none; margin-top:20px;">
+        <label>Select SunCart:</label>
+        <select id="historyCart">
+            {% for cart in carts %}
+                <option value="{{cart}}">{{cart}}</option>
+            {% endfor %}
+        </select>
+        <button onclick="searchHistory()">Search</button>
+        <div id="historyResult" style="margin-top:20px; border:1px solid #ccc; padding:10px; border-radius:5px;"></div>
+    </div>
 
-function saveChanges() {
-    const formData = new FormData(document.getElementById('cartForm'));
-    fetch("/", { method: "POST", body: formData })
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('message').innerText = data.message;
-            setTimeout(()=>{document.getElementById('message').innerText = "";}, 2000);
-        });
-}
+    <script>
+        function saveChanges() {
+            const form = document.getElementById('cartForm');
+            const formData = new FormData(form);
 
-function toggleHistory() {
-    const container = document.getElementById('history-container');
-    container.style.display = container.style.display === "none" ? "block" : "none";
-}
+            fetch("/", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('message').innerText = data.message;
+                setTimeout(() => { document.getElementById('message').innerText = ""; }, 2000);
+            })
+            .catch(error => alert("Error saving changes: " + error));
+        }
 
-function alertStatus(status) {
-    const selectedCarts = [];
-    {% for cart in carts %}
-        if ("{{cart_states[cart]['status']}}" === status) selectedCarts.push("{{cart}}");
-    {% endfor %}
-    alert(status + " SunCarts:\n" + (selectedCarts.length ? selectedCarts.join(", ") : "No SunCarts"));
-}
+        function toggleHistory() {
+            const section = document.getElementById('historySection');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        }
 
-function loadCalendar() {
-    const cart = document.getElementById('history-cart').value;
-    fetch(`/history/${cart}`)
-        .then(res => res.json())
-        .then(events => {
-            const formattedEvents = events.map(e => ({
-                title: e.status + (e.comment ? " ("+e.comment+")" : ""),
-                start: e.datetime.split(" ")[0],
-                allDay: true
-            }));
-            const calendarEl = document.getElementById('calendar');
-            calendarEl.innerHTML = "";
-            const calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'dayGridMonth',
-                events: formattedEvents,
-                dateClick: function(info) {
-                    const dayEvents = formattedEvents.filter(ev => ev.start === info.dateStr);
-                    alert(dayEvents.length ? dayEvents.map(ev => ev.title).join("\n") : "No Data");
+        function searchHistory() {
+            const cart = document.getElementById('historyCart').value;
+            fetch(`/history?cart=${cart}`)
+            .then(response => response.json())
+            .then(data => {
+                if(data.history.length === 0){
+                    document.getElementById('historyResult').innerText = "No Data";
+                } else {
+                    let text = "";
+                    data.history.forEach(entry => {
+                        text += `${entry.timestamp}: Status=${entry.status}, Comment=${entry.comment}\n`;
+                    });
+                    document.getElementById('historyResult').innerText = text;
                 }
-            });
-            calendar.render();
-        });
-}
-</script>
-
+            })
+            .catch(err => alert("Error fetching history: " + err));
+        }
+    </script>
 </body>
 </html>
