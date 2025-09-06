@@ -9,7 +9,7 @@
         .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
         textarea { width: 100%; height: 40px; }
 
-        /* Fixed summary bar */
+        /* Barra fija de resumen */
         .fixed-summary {
             position: fixed;
             top: 0;
@@ -20,102 +20,28 @@
             border-bottom: 2px solid #ccc;
             z-index: 1000;
             display: flex;
-            flex-wrap: wrap;
-            justify-content: flex-start;
+            justify-content: space-around;
             align-items: center;
-            gap: 10px;
         }
 
         .fixed-summary h2 { margin: 0 20px 0 0; font-size: 1.2em; }
+        .fixed-summary .status-item { margin: 0 10px; font-size: 0.95em; cursor: pointer; }
 
-        /* Categories buttons */
-        .status-item { 
-            margin: 0 10px; 
-            font-size: 0.95em; 
-            cursor: pointer; 
-            background-color: #ff9800; /* Naranja */
-            color: white;              
-            padding: 5px 12px;         
-            border-radius: 12px;       
-            text-decoration: none; 
-            font-weight: bold;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-        }
-
-        .status-item:hover {
-            background-color: #e68900;
-        }
-
-        .count-number { margin-left: 5px; }
-
-        body { margin-top: 150px; }
-
-        /* Modal */
-        .modal {
-            display: none; 
-            position: fixed; 
-            z-index: 2000; 
-            left: 0; top: 0; width: 100%; height: 100%;
-            overflow: auto; background-color: rgba(0,0,0,0.4);
-        }
-
-        .modal-content {
-            background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888;
-            width: 80%; max-width: 400px; border-radius: 8px; text-align: center;
-        }
-
-        .modal-content button { margin-top: 15px; padding: 5px 15px; }
-
-        /* SAVE button at top */
-        .save-top { 
-            margin-left: 20px; 
-            padding: 10px 20px;          
-            border-radius: 12px;         
-            background-color: #28a745;    
-            color: white;                 
-            border: none;                 
-            cursor: pointer;              
-            font-weight: bold;
-            font-size: 1em;
-        }
-
-        .save-top:hover {
-            background-color: #218838;   
-        }
-
-        /* Responsive */
-        @media screen and (max-width: 600px) {
-            .fixed-summary {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 5px;
-            }
-            .status-item {
-                font-size: 0.85em;
-                padding: 4px 8px;
-            }
-            .save-top {
-                margin-left: 0;
-                width: 100%;
-                text-align: center;
-            }
-        }
+        body { margin-top: 100px; } /* Espacio para la barra fija */
     </style>
 </head>
 <body>
     <h1>Golf Cart Tracker</h1>
 
-    <!-- Fixed summary bar with SAVE button -->
+    <!-- Barra de resumen fija -->
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
-            <div class="status-item" data-status="{{status}}" onclick="showCategory('{{status}}')">
-                <strong>{{status}}</strong>: <span class="count-number">{{count}}</span>
+            <div class="status-item" onclick="showCategory('{{status}}')">
+                <strong>{{status}}</strong>: {{count}}
             </div>
         {% endfor %}
-        <button class="save-top" onclick="saveChanges()">SAVE</button>
+        <button onclick="document.getElementById('cart-form').submit();">Save Changes</button>
     </div>
 
     <form id="cart-form" method="POST">
@@ -136,8 +62,8 @@
     </form>
 
     <!-- Modal -->
-    <div id="category-modal" class="modal">
-        <div class="modal-content">
+    <div id="category-modal" style="display:none; position:fixed; z-index:2000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color: rgba(0,0,0,0.4);">
+        <div style="background-color:#fff; margin:15% auto; padding:20px; border:1px solid #888; width:80%; max-width:400px; border-radius:8px; text-align:center;">
             <h3 id="modal-title"></h3>
             <ul id="modal-list"></ul>
             <button onclick="closeModal()">OK</button>
@@ -145,9 +71,6 @@
     </div>
 
     <script>
-        const form = document.getElementById('cart-form');
-
-        // Show modal with SunCarts of selected status
         function showCategory(status) {
             fetch(`/category/${status}`)
             .then(response => response.json())
@@ -167,44 +90,6 @@
         function closeModal() {
             document.getElementById('category-modal').style.display = 'none';
         }
-
-        // SAVE button functionality
-        function saveChanges() {
-            fetch('/', {
-                method: 'POST',
-                body: new FormData(form)
-            })
-            .then(response => {
-                alert("Changes have been saved successfully!");
-                updateCounts();
-            });
-        }
-
-        // Update counts live without breaking buttons
-        function updateCounts() {
-            const counts = {};
-            {% for status in status_options %}
-                counts["{{status}}"] = 0;
-            {% endfor %}
-
-            {% for cart in carts %}
-                const status = form.elements["status_{{cart}}"].value;
-                counts[status]++;
-            {% endfor %}
-
-            document.querySelectorAll('.status-item').forEach(el => {
-                const status = el.getAttribute('data-status');
-                el.querySelector('.count-number').innerText = counts[status];
-            });
-        }
-
-        // Add event listeners to selects
-        form.querySelectorAll('select').forEach(select => {
-            select.addEventListener('change', updateCounts);
-        });
-
-        // Initial update
-        updateCounts();
     </script>
 
 </body>
