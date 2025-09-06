@@ -40,11 +40,15 @@
             text-decoration: none; 
             font-weight: bold;
             transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
         }
 
         .status-item:hover {
-            background-color: #e68900; /* Naranja más oscuro */
+            background-color: #e68900;
         }
+
+        .count-number { margin-left: 5px; }
 
         body { margin-top: 150px; }
 
@@ -81,7 +85,7 @@
             background-color: #218838;   
         }
 
-        /* Responsive for mobile */
+        /* Responsive */
         @media screen and (max-width: 600px) {
             .fixed-summary {
                 flex-direction: column;
@@ -107,8 +111,8 @@
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
-            <div class="status-item" onclick="showCategory('{{status}}')">
-                <strong>{{status}}</strong>: {{count}}
+            <div class="status-item" data-status="{{status}}" onclick="showCategory('{{status}}')">
+                <strong>{{status}}</strong>: <span class="count-number">{{count}}</span>
             </div>
         {% endfor %}
         <button class="save-top" onclick="saveChanges()">SAVE</button>
@@ -172,11 +176,11 @@
             })
             .then(response => {
                 alert("Changes have been saved successfully!");
-                location.reload();
+                updateCounts();
             });
         }
 
-        // Update counts automatically when a status is changed
+        // Update counts live without breaking buttons
         function updateCounts() {
             const counts = {};
             {% for status in status_options %}
@@ -188,13 +192,13 @@
                 counts[status]++;
             {% endfor %}
 
-            // Update the fixed summary bar
             document.querySelectorAll('.status-item').forEach(el => {
-                const status = el.innerText.split(':')[0].trim();
-                el.innerText = `${status}: ${counts[status]}`;
+                const status = el.getAttribute('data-status');
+                el.querySelector('.count-number').innerText = counts[status];
             });
         }
 
+        // Add event listeners to selects
         form.querySelectorAll('select').forEach(select => {
             select.addEventListener('change', updateCounts);
         });
