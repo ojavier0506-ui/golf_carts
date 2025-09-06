@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SunCart Tracker</title>
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js'></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
@@ -24,34 +26,32 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-
         .fixed-summary h2 { margin: 0; font-size: 1.2em; }
+        .status-item { background-color: orange; color: white; padding: 5px 10px; border-radius: 8px; cursor: pointer; }
 
-        /* Botones */
         .save-btn { background-color: green; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
-        .history-btn { background-color: orange; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
-        .status-btn { background-color: orange; color: white; border-radius: 8px; padding: 5px 10px; border: none; cursor: pointer; }
+        .history-btn { background-color: skyblue; color: white; border-radius: 8px; padding: 8px 16px; border: none; cursor: pointer; }
 
-        #message { color: green; font-weight: bold; }
-
-        body { margin-top: 120px; } /* espacio para la barra fija */
+        #historyPanel { display: none; margin-top: 120px; }
+        #calendar { max-width: 900px; margin-top: 20px; }
+        #historyResult { background:#eee; padding:10px; margin-top:10px; white-space: pre-wrap; }
+        body { margin-top: 120px; }
     </style>
 </head>
 <body>
+    <h1>SunCart Tracker</h1>
 
     <!-- Barra de resumen fija -->
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
-            <button class="status-btn" onclick="showCarts('{{status}}')">{{status}}: {{count}}</button>
+            <div class="status-item" onclick="alertStatus('{{status}}')">{{status}}: {{count}}</div>
         {% endfor %}
-        <button class="save-btn" onclick="document.getElementById('cartForm').submit();">SAVE</button>
-        <button class="history-btn" onclick="openHistory()">History</button>
+        <button class="save-btn" onclick="saveChanges()">SAVE</button>
+        <button class="history-btn" onclick="toggleHistory()">History</button>
     </div>
 
-    <p id="message">{{ message }}</p>
-
-    <form method="POST" id="cartForm">
+    <form id="cartForm">
         {% for cart in carts %}
             <div class="cart">
                 <h3>{{cart}}</h3>
@@ -68,43 +68,71 @@
         {% endfor %}
     </form>
 
-    <script>
-        function showCarts(status) {
-            let cartsInStatus = [];
+    <!-- Panel de historial -->
+    <div id="historyPanel">
+        <label>Select SunCart:</label>
+        <select id="historyCart" onchange="loadCalendar()">
+            <option value="">--Select--</option>
             {% for cart in carts %}
-                if ("{{cart_states[cart]['status']}}" === status) {
-                    cartsInStatus.push("{{cart}}");
-                }
+                <option value="{{cart}}">{{cart}}</option>
             {% endfor %}
-            alert("SunCarts " + status + ":\n" + cartsInStatus.join(", "));
+        </select>
+        <div id="calendar"></div>
+        <pre id="historyResult"></pre>
+    </div>
+
+    <script>
+        function alertStatus(status) {
+            let carts = [];
+            {% raw %}
+            for (let cart of {{ carts | tojson }}) {
+                let sel = document.querySelector('[name="status_' + cart + '"]');
+                if(sel && sel.value === status) carts.push(cart);
+            }
+            {% endraw %}
+            alert(`SunCarts ${status}: \n` + carts.join(", "));
         }
 
-        function openHistory() {
-            let cart = prompt("Enter SunCart name (e.g., SunCart 1):");
-            let date = prompt("Enter date (YYYY-MM-DD):");
-            if (!cart || !date) return;
-            
-            fetch('/get_history', {
+        function saveChanges() {
+            let formData = new FormData(document.getElementById('cartForm'));
+            fetch("/", {method: "POST", body: formData})
+            .then(res => res.json())
+            .then(data => alert(data.message));
+        }
+
+        function toggleHistory() {
+            let panel = document.getElementById('historyPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        let calendar;
+        function loadCalendar() {
+            let cart = document.getElementById('historyCart').value;
+            if (!cart) return;
+
+            fetch('/get_cart_history_events', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: 'cart=' + encodeURIComponent(cart) + '&date=' + encodeURIComponent(date)
+                headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: 'cart=' + encodeURIComponent(cart)
             })
             .then(res => res.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                } else if (data.length === 0) {
-                    alert("No changes for this date.");
-                } else {
-                    let msg = "History for " + cart + " on " + date + ":\n";
-                    data.forEach(item => {
-                        msg += item.time + " - " + item.status + " - " + item.comment + "\n";
-                    });
-                    alert(msg);
-                }
+            .then(events => {
+                if (calendar) calendar.destroy();
+                let calendarEl = document.getElementById('calendar');
+                calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'dayGridMonth',
+                    events: events,
+                    eventClick: function(info) {
+                        let time = info.event.start.toISOString().replace("T", " ").substring(0,19);
+                        let status = info.event.title;
+                        let comment = info.event.extendedProps.comment;
+                        document.getElementById('historyResult').textContent =
+                            `Time: ${time}\nStatus: ${status}\nComment: ${comment}`;
+                    }
+                });
+                calendar.render();
             });
         }
     </script>
-
 </body>
 </html>
