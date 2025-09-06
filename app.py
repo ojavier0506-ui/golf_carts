@@ -17,13 +17,14 @@ status_options = [
     "Other"
 ]
 
-# Persistencia de datos
+# Disco persistente
 PERSISTENT_PATH = "/persistent"
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
 HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
+
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Inicializar data.json
+# Cargar datos actuales
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
@@ -32,49 +33,40 @@ else:
     with open(DATA_FILE, "w") as f:
         json.dump(cart_states, f)
 
-# Inicializar history.json
+# Cargar historial
 if os.path.exists(HISTORY_FILE):
     with open(HISTORY_FILE, "r") as f:
         history_data = json.load(f)
 else:
-    history_data = {}
+    history_data = {cart: [] for cart in carts}
     with open(HISTORY_FILE, "w") as f:
         json.dump(history_data, f)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global cart_states, history_data
-
     if request.method == 'POST':
         for cart in carts:
-            new_status = request.form.get(f"status_{cart}")
-            new_comment = request.form.get(f"comment_{cart}")
-            if new_status != cart_states[cart]["status"] or new_comment != cart_states[cart]["comment"]:
-                # Guardar cambios en history
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                history_entry = {
-                    "datetime": now,
-                    "status": new_status,
-                    "comment": new_comment
-                }
-                if cart not in history_data:
-                    history_data[cart] = []
-                history_data[cart].append(history_entry)
-                # Mantener solo los últimos 60 días
-                history_data[cart] = [e for e in history_data[cart]
-                                      if datetime.strptime(e["datetime"], "%Y-%m-%d %H:%M:%S") >=
-                                      datetime.now() - timedelta(days=60)]
+            status = request.form.get(f"status_{cart}")
+            comment = request.form.get(f"comment_{cart}")
+            cart_states[cart]["status"] = status
+            cart_states[cart]["comment"] = comment
 
-                # Actualizar estado actual
-                cart_states[cart]["status"] = new_status
-                cart_states[cart]["comment"] = new_comment
+            # Guardar historial con timestamp
+            history_entry = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "status": status,
+                "comment": comment
+            }
+            history_data[cart].append(history_entry)
 
-        # Guardar data.json y history.json
+        # Guardar en disco
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
         with open(HISTORY_FILE, "w") as f:
             json.dump(history_data, f)
-        return jsonify({"message": "Changes saved successfully!"})
+
+        return jsonify({"message": "Changes saved!"})
 
     # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
@@ -84,10 +76,13 @@ def index():
     return render_template("index.html", carts=carts, status_options=status_options,
                            cart_states=cart_states, counts=counts)
 
-@app.route('/history/<cart_name>')
-def get_history(cart_name):
-    # Retorna todos los cambios de un SunCart
-    return jsonify(history_data.get(cart_name, []))
+@app.route('/history')
+def history():
+    cart = request.args.get("cart")
+    if cart in history_data:
+        return jsonify({"history": history_data[cart]})
+    else:
+        return jsonify({"history": []})
 
 if __name__ == "__main__":
     app.run(debug=True)
