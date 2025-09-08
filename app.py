@@ -9,6 +9,7 @@ carts = [f"SunCart {i+1}" for i in range(40)]
 
 # Opciones de estado
 status_options = [
+    "Unassigned",         # 👈 Nueva categoría
     "Charging",
     "Ready for Walk up",
     "Being used by Guest",
@@ -26,7 +27,7 @@ if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
 else:
-    cart_states = {cart: {"status": "Ready for Walk up", "comment": ""} for cart in carts}
+    cart_states = {cart: {"status": "Unassigned", "comment": ""} for cart in carts}
     with open(DATA_FILE, "w") as f:
         json.dump(cart_states, f)
 
@@ -35,15 +36,26 @@ def index():
     global cart_states
     if request.method == 'POST':
         for cart in carts:
-            cart_states[cart]["status"] = request.form.get(f"status_{cart}")
-            cart_states[cart]["comment"] = request.form.get(f"comment_{cart}")
+            new_status = request.form.get(f"status_{cart}")
+            new_comment = request.form.get(f"comment_{cart}")
+
+            # Si el estado es inválido o vacío, mandar a "Unassigned"
+            if new_status not in status_options:
+                new_status = "Unassigned"
+
+            cart_states[cart]["status"] = new_status
+            cart_states[cart]["comment"] = new_comment
+
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
 
     # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
     for cart in carts:
-        counts[cart_states[cart]["status"]] += 1
+        state = cart_states.get(cart, {}).get("status", "Unassigned")
+        if state not in status_options:
+            state = "Unassigned"
+        counts[state] += 1
 
     return render_template("index.html", carts=carts, status_options=status_options,
                            cart_states=cart_states, counts=counts)
@@ -51,6 +63,8 @@ def index():
 # Endpoint para obtener los carritos de una categoría (AJAX)
 @app.route('/category/<status>')
 def category(status):
+    if status not in status_options:
+        return jsonify([])
     result = [cart for cart in carts if cart_states[cart]["status"] == status]
     return jsonify(result)
 
