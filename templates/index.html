@@ -9,7 +9,7 @@
         .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
         textarea { width: 100%; height: 40px; }
 
-        /* Fixed summary bar */
+        /* Barra fija */
         .fixed-summary {
             position: fixed;
             top: 0;
@@ -28,12 +28,12 @@
 
         .fixed-summary h2 { margin: 0 20px 0 0; font-size: 1.2em; }
 
-        /* Categories buttons */
+        /* Categorías como botones */
         .status-item { 
             margin: 0 10px; 
             font-size: 0.95em; 
             cursor: pointer; 
-            background-color: #ff9800; /* Naranja */
+            background-color: #ff9800; 
             color: white;              
             padding: 5px 12px;         
             border-radius: 12px;       
@@ -42,9 +42,7 @@
             transition: background-color 0.2s;
         }
 
-        .status-item:hover {
-            background-color: #e68900;
-        }
+        .status-item:hover { background-color: #e68900; }
 
         body { margin-top: 150px; }
 
@@ -64,7 +62,7 @@
 
         .modal-content button { margin-top: 15px; padding: 5px 15px; }
 
-        /* SAVE button at top */
+        /* Botón SAVE */
         .save-top { 
             margin-left: 20px; 
             padding: 10px 20px;          
@@ -77,15 +75,13 @@
             font-size: 1em;
         }
 
-        .save-top:hover {
-            background-color: #218838;   
-        }
+        .save-top:hover { background-color: #218838; }
     </style>
 </head>
 <body>
     <h1>Golf Cart Tracker</h1>
 
-    <!-- Fixed summary bar with SAVE button -->
+    <!-- Barra fija con categorías y SAVE -->
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
@@ -103,7 +99,9 @@
                 <label>Status: </label>
                 <select name="status_{{cart}}">
                     {% for option in status_options %}
-                        <option value="{{option}}" {% if cart_states[cart]['status'] == option %}selected{% endif %}>{{option}}</option>
+                        <option value="{{option}}" {% if cart_states[cart]['status'] == option %}selected{% endif %}>
+                            {{option}}
+                        </option>
                     {% endfor %}
                 </select>
                 <br><br>
@@ -113,7 +111,7 @@
         {% endfor %}
     </form>
 
-    <!-- Modal -->
+    <!-- Modal para categorías -->
     <div id="category-modal" class="modal">
         <div class="modal-content">
             <h3 id="modal-title"></h3>
@@ -123,7 +121,7 @@
     </div>
 
     <script>
-        // Show modal with SunCarts of selected status
+        // Mostrar modal de categoría
         function showCategory(status) {
             fetch(`/category/${status}`)
             .then(response => response.json())
@@ -131,17 +129,11 @@
                 document.getElementById('modal-title').innerText = `SunCarts ${status}:`;
                 const list = document.getElementById('modal-list');
                 list.innerHTML = '';
-                if (data.length === 0) {
+                data.forEach(cart => {
                     const li = document.createElement('li');
-                    li.innerText = "No SunCarts in this category.";
+                    li.innerText = cart;
                     list.appendChild(li);
-                } else {
-                    data.forEach(cart => {
-                        const li = document.createElement('li');
-                        li.innerText = cart;
-                        list.appendChild(li);
-                    });
-                }
+                });
                 document.getElementById('category-modal').style.display = 'block';
             });
         }
@@ -150,7 +142,7 @@
             document.getElementById('category-modal').style.display = 'none';
         }
 
-        // SAVE button functionality
+        // Botón SAVE con confirmación verde/rojo
         function saveChanges() {
             const form = document.getElementById('cart-form');
             fetch('/', {
@@ -158,11 +150,37 @@
                 body: new FormData(form)
             })
             .then(response => {
-                alert("Changes have been saved successfully!");
-                location.reload();
+                if (response.ok) {
+                    showSaveConfirmation("Changes have been saved successfully!", true);
+                } else {
+                    showSaveConfirmation("Error: Changes could not be saved!", false);
+                }
+            })
+            .catch(() => {
+                showSaveConfirmation("Error: Changes could not be saved!", false);
             });
         }
-    </script>
 
+        // Mensaje de confirmación
+        function showSaveConfirmation(message, success) {
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.top = '20px';
+            modal.style.left = '50%';
+            modal.style.transform = 'translateX(-50%)';
+            modal.style.backgroundColor = success ? '#28a745' : '#dc3545';
+            modal.style.color = 'white';
+            modal.style.padding = '10px 20px';
+            modal.style.borderRadius = '8px';
+            modal.style.zIndex = 3000;
+            modal.innerText = message;
+
+            document.body.appendChild(modal);
+
+            setTimeout(() => {
+                document.body.removeChild(modal);
+            }, 3000);
+        }
+    </script>
 </body>
 </html>
