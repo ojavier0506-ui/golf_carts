@@ -34,16 +34,16 @@
             font-size: 0.95em; 
             cursor: pointer; 
             background-color: #ff9800; /* Naranja */
-            color: white;              /* Texto blanco */
-            padding: 5px 12px;         /* Tamaño del "botón" */
-            border-radius: 12px;       /* Bordes redondeados */
+            color: white;              
+            padding: 5px 12px;         
+            border-radius: 12px;       
             text-decoration: none; 
             font-weight: bold;
             transition: background-color 0.2s;
         }
 
         .status-item:hover {
-            background-color: #e68900; /* Naranja más oscuro al pasar el mouse */
+            background-color: #e68900;
         }
 
         body { margin-top: 150px; }
@@ -131,11 +131,17 @@
                 document.getElementById('modal-title').innerText = `SunCarts ${status}:`;
                 const list = document.getElementById('modal-list');
                 list.innerHTML = '';
-                data.forEach(cart => {
+                if (data.length === 0) {
                     const li = document.createElement('li');
-                    li.innerText = cart;
+                    li.innerText = "No SunCarts in this category.";
                     list.appendChild(li);
-                });
+                } else {
+                    data.forEach(cart => {
+                        const li = document.createElement('li');
+                        li.innerText = cart;
+                        list.appendChild(li);
+                    });
+                }
                 document.getElementById('category-modal').style.display = 'block';
             });
         }
