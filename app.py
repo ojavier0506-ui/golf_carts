@@ -1,15 +1,20 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
 import json
 import os
-from datetime import datetime
+import datetime
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key"  # Necesario para manejar sesiones (puede ser cualquier string)
+app.secret_key = "super_secret_key"  # Necesario para manejar sesiones
 
 # Lista de 40 carritos SunCart
 carts = [f"SunCart {i+1}" for i in range(40)]
 
-# Opciones de estado (con "Unassigned" como categoría inicial)
+# Opciones de estado
 status_options = [
     "Unassigned",
     "Charging",
@@ -19,13 +24,12 @@ status_options = [
     "Other"
 ]
 
-# Ruta del archivo en el disco persistente
+# Ruta del archivo persistente
 PERSISTENT_PATH = "/persistent"
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
-HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Cargar o crear archivo persistente (estado actual)
+# Cargar o crear archivo persistente
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
@@ -33,15 +37,6 @@ else:
     cart_states = {cart: {"status": "Unassigned", "comment": ""} for cart in carts}
     with open(DATA_FILE, "w") as f:
         json.dump(cart_states, f)
-
-# Cargar o crear archivo de historial
-if os.path.exists(HISTORY_FILE):
-    with open(HISTORY_FILE, "r") as f:
-        history = json.load(f)
-else:
-    history = {cart: [] for cart in carts}
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f)
 
 
 # --- LOGIN ---
@@ -69,86 +64,25 @@ def logout():
 # --- APP PRINCIPAL ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global cart_states, history
+    global cart_states
 
     if not session.get('logged_in'):
         return redirect(url_for("login"))
 
     if request.method == 'POST':
-        # Procesar todos los carritos y registrar cambios SOLO si hay diferencia
         for cart in carts:
             status = request.form.get(f"status_{cart}")
-            comment = request.form.get(f"comment_{cart}", "")[:200]  # limitar longitud comentario
+            comment = request.form.get(f"comment_{cart}", "")
 
-            # Seguridad básica: si el estado no es válido, mandar a Unassigned
+            # Seguridad básica
             if status not in status_options:
                 status = "Unassigned"
 
-            prev_status = cart_states.get(cart, {}).get("status", "Unassigned")
-            prev_comment = cart_states.get(cart, {}).get("comment", "")
+            cart_states[cart]["status"] = status
+            cart_states[cart]["comment"] = comment[:200]
 
-            # Si hubo algún cambio (status o comentario), registrar en historial
-            if status != prev_status or comment != prev_comment:
-                now = datetime.now()
-                date_str = now.strftime("%Y-%m-%d")
-                time_str = now.strftime("%H:%M:%S")
-
-                entry = {
-                    "date": date_str,
-                    "time": time_str
-                }
-
-                # Determinar tipo de cambio
-                if status != prev_status and comment != prev_comment:
-                    entry["change"] = "Status+Comment"
-                    entry["details"] = f"{prev_status} → {status}"
-                    # comment action
-                    if prev_comment == "" and comment != "":
-                        entry["comment_action"] = "Added"
-                    elif prev_comment != "" and comment == "":
-                        entry["comment_action"] = "Deleted"
-                    elif prev_comment != comment:
-                        entry["comment_action"] = "Edited"
-                    else:
-                        entry["comment_action"] = None
-
-                    entry["comment_text"] = comment
-
-                elif status != prev_status:
-                    entry["change"] = "Status"
-                    entry["details"] = f"{prev_status} → {status}"
-                    # si también hay cambio de comentario será manejado en la rama anterior
-
-                elif comment != prev_comment:
-                    entry["change"] = "Comment"
-                    # determinar acción de comentario
-                    if prev_comment == "" and comment != "":
-                        entry["comment_action"] = "Added"
-                    elif prev_comment != "" and comment == "":
-                        entry["comment_action"] = "Deleted"
-                    elif prev_comment != comment:
-                        entry["comment_action"] = "Edited"
-                    else:
-                        entry["comment_action"] = None
-
-                    entry["comment_text"] = comment
-
-                # Asegurar que la lista exista
-                if cart not in history:
-                    history[cart] = []
-
-                # Insertar al inicio para ver lo más reciente primero
-                history[cart].insert(0, entry)
-
-            # Actualizar estado actual
-            cart_states[cart] = {"status": status, "comment": comment}
-
-        # Guardar cambios en disco (estados + historial)
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
-
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(history, f)
 
     # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
@@ -167,38 +101,64 @@ def index():
 @app.route('/category/<status>')
 def category(status):
     if not session.get('logged_in'):
-        return jsonify([])  # no permitir acceso si no está logueado
+        return jsonify([])
     result = [cart for cart in carts if cart_states[cart]["status"] == status]
     return jsonify(result)
 
 
-# Página de historial (renderiza la UI)
-@app.route('/history')
-def history_page():
+# --- NUEVA RUTA PARA GENERAR PDF ---
+@app.route('/report')
+def generate_report():
     if not session.get('logged_in'):
         return redirect(url_for("login"))
-    return render_template("history.html", carts=carts)
 
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
 
-# API para obtener historial filtrado (por carrito y opcional por fecha)
-@app.route('/api/history')
-def api_history():
-    if not session.get('logged_in'):
-        return jsonify([])
+    # Título
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, height - 50, "GOLF CART REPORT")
 
-    cart = request.args.get('cart')
-    date = request.args.get('date')  # formato YYYY-MM-DD (opcional)
+    # Fecha y hora
+    now = datetime.datetime.now()
+    c.setFont("Helvetica", 10)
+    c.drawString(50, height - 70, f"Fecha: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    if not cart or cart not in history:
-        return jsonify([])
+    # Resumen de categorías
+    y = height - 100
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Resumen de Estados:")
+    y -= 15
+    counts = {option: sum(1 for cart in carts if cart_states[cart]['status'] == option) for option in status_options}
+    for status, count in counts.items():
+        c.setFont("Helvetica", 10)
+        c.drawString(60, y, f"{status}: {count}")
+        y -= 15
 
-    entries = history.get(cart, [])
-    if date:
-        filtered = [e for e in entries if e.get("date") == date]
-    else:
-        filtered = entries
+    # Tabla de carritos
+    data = [["Carrito", "Estado", "Comentario"]]
+    for cart in carts:
+        data.append([cart, cart_states[cart]["status"], cart_states[cart]["comment"]])
 
-    return jsonify(filtered)
+    table = Table(data, colWidths=[100, 150, 250])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.grey),
+        ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),
+        ('ALIGN',(0,0),(-1,-1),'LEFT'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+    ]))
+
+    table.wrapOn(c, width, height)
+    table.drawOn(c, 50, y - len(data)*18)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="GolfCartReport.pdf", mimetype='application/pdf')
 
 
 if __name__ == "__main__":
