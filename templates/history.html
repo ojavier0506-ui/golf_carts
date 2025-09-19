@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>History - Golf Cart Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:15px; }
+        select, input[type="date"] { padding:8px; border-radius:6px; border:1px solid #ccc; }
+        button { padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
+        .btn-primary { background:#007bff; color:white; }
+        .btn-secondary { background:#6c757d; color:white; }
+        table { width:100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+        th { background:#f4f4f4; }
+        .no-data { text-align:center; padding: 20px; color:#666; }
+        .back { margin-bottom:10px; }
+    </style>
+</head>
+<body>
+    <h1>History</h1>
+    <div class="back">
+        <button class="btn-secondary" onclick="window.location.href='/'">← Back</button>
+    </div>
+
+    <div class="controls">
+        <label for="cart-select">Select Cart:</label>
+        <select id="cart-select">
+            {% for cart in carts %}
+                <option value="{{cart}}">{{cart}}</option>
+            {% endfor %}
+        </select>
+
+        <label for="date-input">Date:</label>
+        <input type="date" id="date-input" />
+
+        <button class="btn-primary" id="filter-btn">Filter</button>
+        <button class="btn-secondary" id="clear-btn">Clear Date</button>
+    </div>
+
+    <div id="table-container">
+        <table id="history-table" aria-describedby="history-rows">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Change</th>
+                    <th>Details</th>
+                    <th>Comment</th>
+                </tr>
+            </thead>
+            <tbody id="history-body">
+                <tr><td colspan="5" class="no-data">Select a cart and click Filter to see its history.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const cartSelect = document.getElementById('cart-select');
+        const dateInput = document.getElementById('date-input');
+        const filterBtn = document.getElementById('filter-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const historyBody = document.getElementById('history-body');
+
+        function renderTable(data) {
+            historyBody.innerHTML = '';
+            if (!data || data.length === 0) {
+                historyBody.innerHTML = '<tr><td colspan="5" class="no-data">No records found for this selection.</td></tr>';
+                return;
+            }
+
+            data.forEach(entry => {
+                const tr = document.createElement('tr');
+                const commentCell = entry.comment_action ? (entry.comment_action + (entry.comment_text ? ': ' + entry.comment_text : '')) : '';
+                tr.innerHTML = `
+                    <td>${entry.date || ''}</td>
+                    <td>${entry.time || ''}</td>
+                    <td>${entry.change || ''}</td>
+                    <td>${entry.details || ''}</td>
+                    <td>${commentCell}</td>
+                `;
+                historyBody.appendChild(tr);
+            });
+        }
+
+        function fetchHistory() {
+            const cart = cartSelect.value;
+            const date = dateInput.value; // empty string if not set
+            let url = `/api/history?cart=${encodeURIComponent(cart)}`;
+            if (date) url += `&date=${encodeURIComponent(date)}`;
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    renderTable(data);
+                })
+                .catch(err => {
+                    console.error(err);
+                    historyBody.innerHTML = '<tr><td colspan="5" class="no-data">Error fetching history.</td></tr>';
+                });
+        }
+
+        filterBtn.addEventListener('click', () => fetchHistory());
+        clearBtn.addEventListener('click', () => {
+            dateInput.value = '';
+            fetchHistory();
+        });
+
+        // Cargar historial del primer carrito al cargar la página (sin fecha)
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchHistory();
+        });
+
+        // También permitir cargar automáticamente al cambiar de carrito
+        cartSelect.addEventListener('change', () => {
+            fetchHistory();
+        });
+    </script>
+</body>
+</html>
