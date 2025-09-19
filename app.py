@@ -136,7 +136,6 @@ def category(status):
 def history():
     if not session.get('logged_in'):
         return redirect(url_for("login"))
-
     return render_template("history.html", carts=carts)
 
 # --- GET HISTORY AJAX ---
@@ -179,11 +178,13 @@ def report():
     for cart in carts:
         pdf.cell(50, 8, cart, 1)
         pdf.cell(50, 8, cart_states[cart]["status"], 1)
-        comment = cart_states[cart]["comment"][:50]  # recortar si muy largo
+        comment = cart_states[cart]["comment"][:50]
         pdf.cell(90, 8, comment, 1, ln=True)
 
-    # Enviar PDF
     output = BytesIO()
     pdf.output(output)
     output.seek(0)
     return send_file(output, download_name="SunCart_Report.pdf", as_attachment=True)
+
+if __name__ == "__main__":
+    app.run(debug=True)
