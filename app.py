@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import json
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"  # Necesario para manejar sesiones (puede ser cualquier string)
@@ -21,9 +22,10 @@ status_options = [
 # Ruta del archivo en el disco persistente
 PERSISTENT_PATH = "/persistent"
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
+HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Cargar o crear archivo persistente
+# Cargar o crear archivo persistente (estado actual)
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
@@ -31,6 +33,15 @@ else:
     cart_states = {cart: {"status": "Unassigned", "comment": ""} for cart in carts}
     with open(DATA_FILE, "w") as f:
         json.dump(cart_states, f)
+
+# Cargar o crear archivo de historial
+if os.path.exists(HISTORY_FILE):
+    with open(HISTORY_FILE, "r") as f:
+        history = json.load(f)
+else:
+    history = {cart: [] for cart in carts}
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f)
 
 
 # --- LOGIN ---
@@ -58,25 +69,86 @@ def logout():
 # --- APP PRINCIPAL ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global cart_states
+    global cart_states, history
 
     if not session.get('logged_in'):
         return redirect(url_for("login"))
 
     if request.method == 'POST':
+        # Procesar todos los carritos y registrar cambios SOLO si hay diferencia
         for cart in carts:
             status = request.form.get(f"status_{cart}")
-            comment = request.form.get(f"comment_{cart}", "")
+            comment = request.form.get(f"comment_{cart}", "")[:200]  # limitar longitud comentario
 
             # Seguridad básica: si el estado no es válido, mandar a Unassigned
             if status not in status_options:
                 status = "Unassigned"
 
-            cart_states[cart]["status"] = status
-            cart_states[cart]["comment"] = comment[:200]  # limitar longitud comentario
+            prev_status = cart_states.get(cart, {}).get("status", "Unassigned")
+            prev_comment = cart_states.get(cart, {}).get("comment", "")
 
+            # Si hubo algún cambio (status o comentario), registrar en historial
+            if status != prev_status or comment != prev_comment:
+                now = datetime.now()
+                date_str = now.strftime("%Y-%m-%d")
+                time_str = now.strftime("%H:%M:%S")
+
+                entry = {
+                    "date": date_str,
+                    "time": time_str
+                }
+
+                # Determinar tipo de cambio
+                if status != prev_status and comment != prev_comment:
+                    entry["change"] = "Status+Comment"
+                    entry["details"] = f"{prev_status} → {status}"
+                    # comment action
+                    if prev_comment == "" and comment != "":
+                        entry["comment_action"] = "Added"
+                    elif prev_comment != "" and comment == "":
+                        entry["comment_action"] = "Deleted"
+                    elif prev_comment != comment:
+                        entry["comment_action"] = "Edited"
+                    else:
+                        entry["comment_action"] = None
+
+                    entry["comment_text"] = comment
+
+                elif status != prev_status:
+                    entry["change"] = "Status"
+                    entry["details"] = f"{prev_status} → {status}"
+                    # si también hay cambio de comentario será manejado en la rama anterior
+
+                elif comment != prev_comment:
+                    entry["change"] = "Comment"
+                    # determinar acción de comentario
+                    if prev_comment == "" and comment != "":
+                        entry["comment_action"] = "Added"
+                    elif prev_comment != "" and comment == "":
+                        entry["comment_action"] = "Deleted"
+                    elif prev_comment != comment:
+                        entry["comment_action"] = "Edited"
+                    else:
+                        entry["comment_action"] = None
+
+                    entry["comment_text"] = comment
+
+                # Asegurar que la lista exista
+                if cart not in history:
+                    history[cart] = []
+
+                # Insertar al inicio para ver lo más reciente primero
+                history[cart].insert(0, entry)
+
+            # Actualizar estado actual
+            cart_states[cart] = {"status": status, "comment": comment}
+
+        # Guardar cambios en disco (estados + historial)
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
+
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(history, f)
 
     # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
@@ -98,6 +170,35 @@ def category(status):
         return jsonify([])  # no permitir acceso si no está logueado
     result = [cart for cart in carts if cart_states[cart]["status"] == status]
     return jsonify(result)
+
+
+# Página de historial (renderiza la UI)
+@app.route('/history')
+def history_page():
+    if not session.get('logged_in'):
+        return redirect(url_for("login"))
+    return render_template("history.html", carts=carts)
+
+
+# API para obtener historial filtrado (por carrito y opcional por fecha)
+@app.route('/api/history')
+def api_history():
+    if not session.get('logged_in'):
+        return jsonify([])
+
+    cart = request.args.get('cart')
+    date = request.args.get('date')  # formato YYYY-MM-DD (opcional)
+
+    if not cart or cart not in history:
+        return jsonify([])
+
+    entries = history.get(cart, [])
+    if date:
+        filtered = [e for e in entries if e.get("date") == date]
+    else:
+        filtered = entries
+
+    return jsonify(filtered)
 
 
 if __name__ == "__main__":
