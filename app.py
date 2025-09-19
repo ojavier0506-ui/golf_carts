@@ -181,10 +181,14 @@ def report():
         comment = cart_states[cart]["comment"][:50]
         pdf.cell(90, 8, comment, 1, ln=True)
 
+    # Crear nombre con fecha y hora
+    now = datetime.now()
+    filename = now.strftime("SunCarts_%Y-%m-%d_%H-%M-%S.pdf")
+
     # Guardar en BytesIO
     pdf_bytes = BytesIO(pdf.output(dest='S').encode('latin1'))
     pdf_bytes.seek(0)
-    return send_file(pdf_bytes, download_name="SunCart_Report.pdf", as_attachment=True)
+    return send_file(pdf_bytes, download_name=filename, as_attachment=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
