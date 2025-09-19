@@ -2,8 +2,9 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import json
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo  # Para usar hora local
 from io import BytesIO
-from fpdf import FPDF  # Para generar PDF
+from fpdf import FPDF
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
@@ -79,7 +80,7 @@ def index():
                 status = "Unassigned"
 
             # Guardar cambios en el historial
-            now = datetime.now()
+            now = datetime.now(ZoneInfo("America/New_York"))
             old_status = cart_states[cart]["status"]
             old_comment = cart_states[cart]["comment"]
 
@@ -181,11 +182,11 @@ def report():
         comment = cart_states[cart]["comment"][:50]
         pdf.cell(90, 8, comment, 1, ln=True)
 
-    # Crear nombre con fecha y hora
-    now = datetime.now()
-    filename = now.strftime("SunCarts_%Y-%m-%d_%H-%M-%S.pdf")
+    # Crear nombre con solo la fecha local de Orlando/Cuba
+    now = datetime.now(ZoneInfo("America/New_York"))
+    filename = now.strftime("SunCarts_%Y-%m-%d.pdf")
 
-    # Guardar en BytesIO
+    # Guardar en BytesIO y enviar
     pdf_bytes = BytesIO(pdf.output(dest='S').encode('latin1'))
     pdf_bytes.seek(0)
     return send_file(pdf_bytes, download_name=filename, as_attachment=True)
