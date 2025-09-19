@@ -62,7 +62,7 @@
 
         .modal-content button { margin-top: 15px; padding: 5px 15px; }
 
-        /* Botón SAVE y REPORT */
+        /* Botones SAVE, HISTORY y REPORT */
         .save-top { 
             margin-left: 20px; 
             padding: 10px 20px;          
@@ -90,6 +90,7 @@
             </div>
         {% endfor %}
         <button class="save-top" onclick="saveChanges()">SAVE</button>
+        <button class="save-top" onclick="window.location.href='/history'">HISTORY</button>
         <button class="save-top" onclick="window.location.href='/report'">REPORT</button>
     </div>
 
