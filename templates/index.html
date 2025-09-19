@@ -62,7 +62,7 @@
 
         .modal-content button { margin-top: 15px; padding: 5px 15px; }
 
-        /* Botón SAVE */
+        /* Botón SAVE y REPORT */
         .save-top { 
             margin-left: 20px; 
             padding: 10px 20px;          
@@ -76,26 +76,12 @@
         }
 
         .save-top:hover { background-color: #218838; }
-
-        /* Botón HISTORY */
-        .history-top {
-            margin-left: 10px;
-            padding: 10px 18px;
-            border-radius: 12px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 1em;
-        }
-        .history-top:hover { background-color: #0069d9; }
     </style>
 </head>
 <body>
     <h1>Golf Cart Tracker</h1>
 
-    <!-- Barra fija con categorías y SAVE + HISTORY-->
+    <!-- Barra fija con categorías, SAVE, HISTORY y REPORT -->
     <div class="fixed-summary">
         <h2>Status Summary:</h2>
         {% for status, count in counts.items() %}
@@ -104,7 +90,7 @@
             </div>
         {% endfor %}
         <button class="save-top" onclick="saveChanges()">SAVE</button>
-        <button class="history-top" onclick="goHistory()">HISTORY</button>
+        <button class="save-top" onclick="window.location.href='/report'">REPORT</button>
     </div>
 
     <form id="cart-form" method="POST">
@@ -136,11 +122,6 @@
     </div>
 
     <script>
-        // Ir a la página de historial
-        function goHistory() {
-            window.location.href = "/history";
-        }
-
         // Mostrar modal de categoría
         function showCategory(status) {
             fetch(`/category/${status}`)
