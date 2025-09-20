@@ -2,14 +2,14 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import json
 import os
 from datetime import datetime
-from zoneinfo import ZoneInfo  # Para usar hora local
+from zoneinfo import ZoneInfo
 from io import BytesIO
 from fpdf import FPDF
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
 
-# Lista de 40 carritos SunCart
+# Lista de carritos
 carts = [f"SunCart {i+1}" for i in range(40)]
 
 # Opciones de estado
@@ -79,7 +79,6 @@ def index():
             if status not in status_options:
                 status = "Unassigned"
 
-            # Guardar cambios en el historial
             now = datetime.now(ZoneInfo("America/New_York"))
             old_status = cart_states[cart]["status"]
             old_comment = cart_states[cart]["comment"]
@@ -107,89 +106,23 @@ def index():
             cart_states[cart]["status"] = status
             cart_states[cart]["comment"] = comment[:200]
 
-        # Guardar archivos
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
         with open(HISTORY_FILE, "w") as f:
             json.dump(history_log, f)
 
-    counts = {option: 0 for option in status_options}
-    for cart in carts:
-        state = cart_states[cart]["status"]
-        if state not in status_options:
-            state = "Unassigned"
-            cart_states[cart]["status"] = state
-        counts[state] += 1
+        # Recalcular conteos
+        counts = {option: 0 for option in status_options}
+        for cart in carts:
+            counts[cart_states[cart]["status"]] += 1
 
-    return render_template("index.html", carts=carts, status_options=status_options,
-                           cart_states=cart_states, counts=counts)
+        # 👉 devolver JSON si es fetch
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": True, "counts": counts})
 
-# --- CATEGORY AJAX ---
-@app.route('/category/<status>')
-def category(status):
-    if not session.get('logged_in'):
-        return jsonify([])
-    result = [cart for cart in carts if cart_states[cart]["status"] == status]
-    return jsonify(result)
-
-# --- HISTORY PAGE ---
-@app.route('/history')
-def history():
-    if not session.get('logged_in'):
-        return redirect(url_for("login"))
-    return render_template("history.html", carts=carts)
-
-# --- GET HISTORY AJAX ---
-@app.route('/history/<cart_name>')
-def get_cart_history(cart_name):
-    if not session.get('logged_in'):
-        return jsonify([])
-    return jsonify(history_log.get(cart_name, []))
-
-# --- REPORT PDF ---
-@app.route('/report')
-def report():
-    if not session.get('logged_in'):
-        return redirect(url_for("login"))
-
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "SunCart Report", ln=True, align="C")
-    pdf.ln(10)
-
-    # Conteo por categoría
     counts = {option: 0 for option in status_options}
     for cart in carts:
         counts[cart_states[cart]["status"]] += 1
 
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, "Cart counts by category:", ln=True)
-    for status, count in counts.items():
-        pdf.cell(0, 8, f"{status}: {count}", ln=True)
-    pdf.ln(5)
-
-    # Tabla de carritos
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(50, 8, "Cart", 1)
-    pdf.cell(50, 8, "Status", 1)
-    pdf.cell(90, 8, "Comment", 1, ln=True)
-
-    pdf.set_font("Arial", "", 12)
-    for cart in carts:
-        pdf.cell(50, 8, cart, 1)
-        pdf.cell(50, 8, cart_states[cart]["status"], 1)
-        comment = cart_states[cart]["comment"][:50]
-        pdf.cell(90, 8, comment, 1, ln=True)
-
-    # Crear nombre con solo la fecha local de Orlando/Cuba
-    now = datetime.now(ZoneInfo("America/New_York"))
-    filename = now.strftime("SunCarts_%Y-%m-%d.pdf")
-
-    # Guardar en BytesIO y enviar
-    pdf_bytes = BytesIO(pdf.output(dest='S').encode('latin1'))
-    pdf_bytes.seek(0)
-    return send_file(pdf_bytes, download_name=filename, as_attachment=True)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    return render_template("index.html", carts=carts, status_options=status_options,
+                           cart_states=cart_states, counts=counts)
