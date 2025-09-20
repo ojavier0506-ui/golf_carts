@@ -64,76 +64,82 @@ def logout():
     return redirect(url_for("login"))
 
 # --- APP PRINCIPAL ---
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
-    global cart_states, history_log
-
     if not session.get('logged_in'):
         return redirect(url_for("login"))
-
-    if request.method == 'POST':
-        for cart in carts:
-            status = request.form.get(f"status_{cart}")
-            comment = request.form.get(f"comment_{cart}", "")
-
-            if status not in status_options:
-                status = "Unassigned"
-
-            now = datetime.now(ZoneInfo("America/New_York"))
-            old_status = cart_states[cart]["status"]
-            old_comment = cart_states[cart]["comment"]
-
-            if old_status != status:
-                history_log[cart].append({
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "change_type": "Status changed",
-                    "old_value": old_status,
-                    "new_value": status,
-                    "comment": comment
-                })
-
-            if old_comment != comment:
-                history_log[cart].append({
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "change_type": "Comment updated",
-                    "old_value": old_comment,
-                    "new_value": comment,
-                    "comment": comment
-                })
-
-            cart_states[cart]["status"] = status
-            cart_states[cart]["comment"] = comment[:200]
-
-        with open(DATA_FILE, "w") as f:
-            json.dump(cart_states, f)
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(history_log, f)
-
-        # Recalcular conteos
-        counts = {option: 0 for option in status_options}
-        for cart in carts:
-            counts[cart_states[cart]["status"]] += 1
-
-        # 👉 devolver JSON si es fetch
-        if request.headers.get("X-Requested-With") == "fetch":
-            return jsonify({"success": True, "counts": counts})
 
     counts = {option: 0 for option in status_options}
     for cart in carts:
         counts[cart_states[cart]["status"]] += 1
 
-    return render_template("index.html", carts=carts, status_options=status_options,
-                           cart_states=cart_states, counts=counts)
+    return render_template("index.html", carts=carts,
+                           status_options=status_options,
+                           counts=counts)
 
-# --- CATEGORY AJAX ---
-@app.route('/category/<status>')
-def category(status):
+# --- API: Obtener datos de un carrito ---
+@app.route('/cart/<cart_name>')
+def get_cart(cart_name):
     if not session.get('logged_in'):
-        return jsonify([])
-    result = [cart for cart in carts if cart_states[cart]["status"] == status]
-    return jsonify(result)
+        return jsonify({})
+    return jsonify(cart_states.get(cart_name, {"status": "Unassigned", "comment": ""}))
+
+# --- API: Guardar cambios de un carrito ---
+@app.route('/update_cart', methods=['POST'])
+def update_cart():
+    global cart_states, history_log
+
+    if not session.get('logged_in'):
+        return jsonify({"success": False})
+
+    cart = request.form.get("cart")
+    status = request.form.get("status")
+    comment = request.form.get("comment", "")[:200]
+
+    if cart not in carts:
+        return jsonify({"success": False})
+
+    if status not in status_options:
+        status = "Unassigned"
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    old_status = cart_states[cart]["status"]
+    old_comment = cart_states[cart]["comment"]
+
+    if old_status != status:
+        history_log[cart].append({
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H:%M:%S"),
+            "change_type": "Status changed",
+            "old_value": old_status,
+            "new_value": status,
+            "comment": comment
+        })
+
+    if old_comment != comment:
+        history_log[cart].append({
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H:%M:%S"),
+            "change_type": "Comment updated",
+            "old_value": old_comment,
+            "new_value": comment,
+            "comment": comment
+        })
+
+    cart_states[cart]["status"] = status
+    cart_states[cart]["comment"] = comment
+
+    with open(DATA_FILE, "w") as f:
+        json.dump(cart_states, f)
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history_log, f)
+
+    # Recalcular conteos
+    counts = {option: 0 for option in status_options}
+    for c in carts:
+        counts[cart_states[c]["status"]] += 1
+
+    return jsonify({"success": True, "counts": counts})
 
 # --- HISTORY PAGE ---
 @app.route('/history')
@@ -142,7 +148,6 @@ def history():
         return redirect(url_for("login"))
     return render_template("history.html", carts=carts)
 
-# --- GET HISTORY AJAX ---
 @app.route('/history/<cart_name>')
 def get_cart_history(cart_name):
     if not session.get('logged_in'):
@@ -161,18 +166,17 @@ def report():
     pdf.cell(0, 10, "SunCart Report", ln=True, align="C")
     pdf.ln(10)
 
-    # Conteo por categoría
+    # Conteo
     counts = {option: 0 for option in status_options}
     for cart in carts:
         counts[cart_states[cart]["status"]] += 1
 
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, "Cart counts by category:", ln=True)
     for status, count in counts.items():
         pdf.cell(0, 8, f"{status}: {count}", ln=True)
     pdf.ln(5)
 
-    # Tabla de carritos
+    # Tabla
     pdf.set_font("Arial", "B", 12)
     pdf.cell(50, 8, "Cart", 1)
     pdf.cell(50, 8, "Status", 1)
@@ -182,8 +186,7 @@ def report():
     for cart in carts:
         pdf.cell(50, 8, cart, 1)
         pdf.cell(50, 8, cart_states[cart]["status"], 1)
-        comment = cart_states[cart]["comment"][:50]
-        pdf.cell(90, 8, comment, 1, ln=True)
+        pdf.cell(90, 8, cart_states[cart]["comment"][:45], 1, ln=True)
 
     now = datetime.now(ZoneInfo("America/New_York"))
     filename = now.strftime("SunCarts_%Y-%m-%d.pdf")
