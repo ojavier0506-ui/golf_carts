@@ -1,165 +1,185 @@
 from flask import Flask, render_template, request, redirect, url_for, session, send_file
-from fpdf import FPDF
-import sqlite3
-from io import BytesIO
 from datetime import datetime
+import json
+import os
+from fpdf import FPDF
+import io
 import pytz
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = "super_secret_key"
 
-DB_FILE = "database.db"
+# Lista de 40 carritos SunCart
+carts = [f"SunCart {i+1}" for i in range(40)]
 
-# ----------------------
-# Función para DB
-# ----------------------
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Opciones de estado
+status_options = [
+    "Unassigned",
+    "Charging",
+    "Ready for Walk up",
+    "Being used by Guest",
+    "Out of Service",
+    "Other"
+]
 
-# ----------------------
-# Página principal
-# ----------------------
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if "username" not in session:
-        return redirect(url_for("login"))
+# Archivos persistentes
+PERSISTENT_PATH = "/persistent"
+os.makedirs(PERSISTENT_PATH, exist_ok=True)
+DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
+HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
 
-    conn = get_db_connection()
+# Cargar datos
+if os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "r") as f:
+        cart_states = json.load(f)
+else:
+    cart_states = {cart: {"status": "Unassigned", "comment": ""} for cart in carts}
+    with open(DATA_FILE, "w") as f:
+        json.dump(cart_states, f)
 
-    if request.method == "POST":
-        cart_id = request.form["cart_id"]
-        status = request.form["status"]
-        comment = request.form["comment"]
+if os.path.exists(HISTORY_FILE):
+    with open(HISTORY_FILE, "r") as f:
+        history_data = json.load(f)
+else:
+    history_data = []
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history_data, f)
 
-        conn.execute("UPDATE carts SET status=?, comment=? WHERE id=?", (status, comment, cart_id))
-
-        # Guardar historial
-        conn.execute(
-            "INSERT INTO history (cart_id, status, comment, timestamp) VALUES (?, ?, ?, ?)",
-            (cart_id, status, comment, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-
-        conn.commit()
-
-    carts = conn.execute("SELECT * FROM carts").fetchall()
-    conn.close()
-
-    return render_template("index.html", carts=carts)
-
-
-# ----------------------
-# Login
-# ----------------------
-@app.route("/login", methods=["GET", "POST"])
+# --- LOGIN ---
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        if username == "admin" and password == "1234":
-            session["username"] = username
+    if request.method == 'POST':
+        username = request.form.get("username").strip()
+        password = request.form.get("password").strip()
+        if username.lower() == "oscar" and password == "3280":
+            session['logged_in'] = True
             return redirect(url_for("index"))
         else:
-            error = "Invalid credentials"
-    return render_template("login.html", error=error)
+            return render_template("login.html", error="Invalid credentials")
+    return render_template("login.html")
 
-
-@app.route("/logout")
+@app.route('/logout')
 def logout():
-    session.pop("username", None)
+    session.clear()
     return redirect(url_for("login"))
 
+# --- APP PRINCIPAL ---
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    global cart_states, history_data
 
-# ----------------------
-# Historial
-# ----------------------
-@app.route("/history", methods=["GET"])
-def history():
-    if "username" not in session:
+    if not session.get('logged_in'):
         return redirect(url_for("login"))
 
-    cart_id = request.args.get("cart_id")
-    date_filter = request.args.get("date")
+    if request.method == 'POST':
+        cart = request.form.get("selected_cart")
+        status = request.form.get("status")
+        comment = request.form.get("comment", "")[:200]
 
-    conn = get_db_connection()
-    carts = conn.execute("SELECT * FROM carts").fetchall()
+        # Guardar historial si hay cambios
+        old_status = cart_states[cart]["status"]
+        old_comment = cart_states[cart]["comment"]
+        changes = []
 
-    query = """
-        SELECT h.id, h.timestamp, h.status, h.comment, c.name as cart_name
-        FROM history h
-        JOIN carts c ON h.cart_id = c.id
-        WHERE 1=1
-    """
-    params = []
+        if status != old_status:
+            changes.append({"change_type": "Status Change", "from": old_status, "to": status})
+        if comment != old_comment:
+            changes.append({"change_type": "Comment Change", "from": old_comment, "to": comment})
 
-    if cart_id:
-        query += " AND h.cart_id = ?"
-        params.append(cart_id)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for c in changes:
+            history_data.append({
+                "cart": cart,
+                "timestamp": timestamp,
+                "change": c["change_type"],
+                "from": c["from"],
+                "to": c["to"]
+            })
 
-    if date_filter:
-        query += " AND DATE(h.timestamp) = ?"
-        params.append(date_filter)
+        cart_states[cart]["status"] = status
+        cart_states[cart]["comment"] = comment
 
-    query += " ORDER BY h.timestamp DESC"
+        # Guardar en disco
+        with open(DATA_FILE, "w") as f:
+            json.dump(cart_states, f)
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(history_data, f)
 
-    history_data = conn.execute(query, params).fetchall()
-    conn.close()
-
-    return render_template("history.html", history=history_data, carts=carts)
-
-
-# ----------------------
-# Reporte PDF
-# ----------------------
-@app.route("/report", methods=["GET"])
-def report():
-    if "username" not in session:
-        return redirect(url_for("login"))
-
-    conn = get_db_connection()
-    carts = conn.execute("SELECT * FROM carts").fetchall()
-    conn.close()
-
-    # Resumen de categorías
-    category_counts = {}
+    counts = {option: 0 for option in status_options}
     for cart in carts:
-        category_counts[cart["status"]] = category_counts.get(cart["status"], 0) + 1
+        state = cart_states[cart]["status"]
+        if state not in status_options:
+            state = "Unassigned"
+            cart_states[cart]["status"] = state
+        counts[state] += 1
+
+    return render_template("index.html", carts=carts, cart_states=cart_states,
+                           status_options=status_options, counts=counts)
+
+# --- Historial ---
+@app.route('/history', methods=['GET', 'POST'])
+def history():
+    if not session.get('logged_in'):
+        return redirect(url_for("login"))
+
+    selected_cart = None
+    selected_date = None
+    filtered_history = []
+
+    if request.method == 'POST':
+        selected_cart = request.form.get("cart_filter")
+        selected_date = request.form.get("date_filter")
+        for h in history_data:
+            if (not selected_cart or h["cart"] == selected_cart) and \
+               (not selected_date or h["timestamp"].startswith(selected_date)):
+                filtered_history.append(h)
+
+    return render_template("history.html", carts=carts,
+                           history=filtered_history,
+                           selected_cart=selected_cart,
+                           selected_date=selected_date)
+
+# --- PDF Report ---
+@app.route('/report')
+def report():
+    if not session.get('logged_in'):
+        return redirect(url_for("login"))
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Reporte de SunCarts", ln=True, align="C")
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, "SunCarts Report", ln=True, align="C")
+    pdf.ln(5)
 
+    # Conteo por estado
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, "Resumen por categoría:", ln=True)
-    for status, count in category_counts.items():
-        pdf.cell(0, 10, f"{status}: {count} carritos", ln=True)
+    for status in status_options:
+        count = sum(1 for c in carts if cart_states[c]["status"] == status)
+        pdf.cell(0, 8, f"{status}: {count}", ln=True)
+    pdf.ln(5)
 
-    pdf.ln(10)
+    # Tabla de carritos
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(40, 10, "Carrito")
-    pdf.cell(40, 10, "Categoría")
-    pdf.cell(100, 10, "Comentario", ln=True)
+    pdf.cell(50, 8, "Carrito", 1)
+    pdf.cell(50, 8, "Status", 1)
+    pdf.cell(90, 8, "Comment", 1, ln=True)
 
     pdf.set_font("Arial", "", 12)
     for cart in carts:
-        pdf.cell(40, 10, cart["name"])
-        pdf.cell(40, 10, cart["status"])
-        pdf.multi_cell(100, 10, cart["comment"] or "")
+        pdf.cell(50, 8, cart, 1)
+        pdf.cell(50, 8, cart_states[cart]["status"], 1)
+        comment = cart_states[cart]["comment"][:45]  # Ajustar ancho
+        pdf.cell(90, 8, comment, 1, ln=True)
 
-    # Nombre del archivo con fecha (sin hora)
-    cuba_tz = pytz.timezone("America/Havana")
-    current_date = datetime.now(cuba_tz).strftime("%Y-%m-%d")
-    filename = f"SunCarts_{current_date}.pdf"
+    # Nombre con fecha actual
+    tz = pytz.timezone("America/New_York")
+    filename = f"SunCarts_{datetime.now(tz).strftime('%Y-%m-%d')}.pdf"
 
-    output = BytesIO()
-    pdf.output(output, "F")
+    output = io.BytesIO()
+    pdf.output(output)
     output.seek(0)
 
     return send_file(output, download_name=filename, as_attachment=True)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
