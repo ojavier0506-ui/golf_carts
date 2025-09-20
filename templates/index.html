@@ -23,7 +23,11 @@
     }
     .status-item:hover { background-color: #e68900; }
 
-    body { margin-top: 150px; }
+    /* Espaciado para que el contenido no quede tapado por la barra fija */
+    body { margin-top: 160px; }
+    @media (max-width: 768px) {
+        body { margin-top: 220px; }
+    }
 
     .container { 
         max-width: 400px; margin: auto; 
