@@ -2,51 +2,78 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Historial</title>
+<title>SunCart History</title>
 <style>
-body { font-family: Arial; margin:20px;}
-table {width:100%; border-collapse:collapse;}
-th, td {border:1px solid #ccc; padding:5px;}
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    label { margin-right: 10px; font-weight: bold; }
+    select, input[type="date"] { margin-right: 20px; padding: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
 </style>
 </head>
 <body>
-<h1>Historial</h1>
+<h1>SunCart History</h1>
 
-<form method="POST">
-    <label>Filtrar por Carrito:</label>
-    <select name="cart_filter">
-        <option value="">Todos</option>
-        {% for cart in carts %}
-            <option value="{{ cart }}" {% if selected_cart==cart %}selected{% endif %}>{{ cart }}</option>
-        {% endfor %}
-    </select>
+<label>Select Cart:</label>
+<select id="cart-select">
+    {% for cart in carts %}
+        <option value="{{cart}}">{{cart}}</option>
+    {% endfor %}
+</select>
 
-    <label>Filtrar por Fecha:</label>
-    <input type="date" name="date_filter" value="{{ selected_date }}">
-
-    <button type="submit">Buscar</button>
-</form>
+<label>Select Date:</label>
+<input type="date" id="date-select">
 
 <table>
-    <tr>
-        <th>Carrito</th>
-        <th>Fecha y Hora</th>
-        <th>Tipo de Cambio</th>
-        <th>Desde</th>
-        <th>Hasta</th>
-    </tr>
-    {% for h in history %}
-    <tr>
-        <td>{{ h.cart }}</td>
-        <td>{{ h.timestamp }}</td>
-        <td>{{ h.change }}</td>
-        <td>{{ h.from }}</td>
-        <td>{{ h.to }}</td>
-    </tr>
-    {% endfor %}
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Change Type</th>
+            <th>Old Value</th>
+            <th>New Value</th>
+            <th>Comment</th>
+        </tr>
+    </thead>
+    <tbody id="history-table">
+    </tbody>
 </table>
 
-<br>
-<a href="{{ url_for('index') }}">⬅ Regresar a Principal</a>
+<script>
+const cartSelect = document.getElementById('cart-select');
+const dateSelect = document.getElementById('date-select');
+const historyTable = document.getElementById('history-table');
+
+function loadHistory() {
+    const cart = cartSelect.value;
+    const selectedDate = dateSelect.value;
+
+    fetch(`/history/${cart}`)
+    .then(res => res.json())
+    .then(data => {
+        historyTable.innerHTML = '';
+        data.forEach(entry => {
+            if(selectedDate && entry.date !== selectedDate) return;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${entry.date}</td>
+                <td>${entry.time}</td>
+                <td>${entry.change_type}</td>
+                <td>${entry.old_value}</td>
+                <td>${entry.new_value}</td>
+                <td>${entry.comment}</td>
+            `;
+            historyTable.appendChild(row);
+        });
+    });
+}
+
+cartSelect.addEventListener('change', loadHistory);
+dateSelect.addEventListener('change', loadHistory);
+
+// Cargar historial inicial
+loadHistory();
+</script>
 </body>
 </html>
