@@ -6,21 +6,63 @@
 <title>Golf Cart Tracker</title>
 <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
+
     .fixed-summary {
         position: fixed; top: 0; left: 0; right: 0;
         background: #f4f4f4; padding: 10px 20px; border-bottom: 2px solid #ccc;
-        z-index: 1000; display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 10px;
+        z-index: 1000; display: flex; flex-wrap: wrap; 
+        justify-content: flex-start; align-items: center; gap: 10px;
     }
     .fixed-summary h2 { margin: 0 20px 0 0; font-size: 1.2em; }
-    .status-item { margin: 0 10px; font-size: 0.95em; cursor: pointer; background-color: #ff9800; color: white; padding: 5px 12px; border-radius: 12px; font-weight: bold; transition: background-color 0.2s; }
+
+    .status-item { 
+        margin: 0 10px; font-size: 0.95em; 
+        cursor: pointer; background-color: #ff9800; 
+        color: white; padding: 5px 12px; border-radius: 12px; 
+        font-weight: bold; transition: background-color 0.2s; 
+    }
     .status-item:hover { background-color: #e68900; }
+
     body { margin-top: 150px; }
-    .container { max-width: 400px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; background: #f9f9f9; }
+
+    .container { 
+        max-width: 400px; margin: auto; 
+        border: 1px solid #ccc; padding: 20px; 
+        border-radius: 8px; background: #f9f9f9; 
+    }
     label { display: block; margin-top: 10px; }
     select, textarea, button { width: 100%; margin-top: 5px; padding: 8px; }
-    button { border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    .save-btn { background: #28a745; color: white; margin-top: 10px; }
-    .save-btn:hover { background: #218838; }
+    textarea { resize: vertical; }
+
+    /* Grupo de botones arriba */
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-left: auto; /* empuja los botones a la derecha */
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+        color: white;
+        transition: background-color 0.2s;
+    }
+
+    /* Colores específicos */
+    .btn.save { background-color: #28a745; }
+    .btn.save:hover { background-color: #218838; }
+
+    .btn.logout { background-color: #dc3545; }
+    .btn.logout:hover { background-color: #b02a37; }
+
+    .btn.history { background-color: #ff9800; }
+    .btn.history:hover { background-color: #e68900; }
+
+    .btn.report { background-color: #6f42c1; }
+    .btn.report:hover { background-color: #59359c; }
 </style>
 </head>
 <body>
@@ -33,10 +75,13 @@
             <strong data-status="{{status}}">{{status}}</strong>: <span id="count-{{status}}">{{count}}</span>
         </div>
     {% endfor %}
-    <button class="save-btn" onclick="saveCart()">SAVE</button>
-    <button class="save-btn" onclick="window.location.href='/history'">HISTORY</button>
-    <button class="save-btn" onclick="window.location.href='/report'">REPORT</button>
-    <button class="save-btn" onclick="window.location.href='/logout'">LOGOUT</button>
+
+    <div class="button-group">
+        <button class="btn save" onclick="saveCart()">SAVE</button>
+        <button class="btn history" onclick="window.location.href='/history'">HISTORY</button>
+        <button class="btn report" onclick="window.location.href='/report'">REPORT</button>
+        <button class="btn logout" onclick="window.location.href='/logout'">LOGOUT</button>
+    </div>
 </div>
 
 <div class="container">
