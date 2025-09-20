@@ -6,8 +6,6 @@
 <title>Golf Cart Tracker</title>
 <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
-    .cart { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; }
-    textarea { width: 100%; height: 40px; }
     .fixed-summary {
         position: fixed; top: 0; left: 0; right: 0;
         background: #f4f4f4; padding: 10px 20px; border-bottom: 2px solid #ccc;
@@ -17,11 +15,12 @@
     .status-item { margin: 0 10px; font-size: 0.95em; cursor: pointer; background-color: #ff9800; color: white; padding: 5px 12px; border-radius: 12px; font-weight: bold; transition: background-color 0.2s; }
     .status-item:hover { background-color: #e68900; }
     body { margin-top: 150px; }
-    .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
-    .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; border-radius: 8px; text-align: center; }
-    .modal-content button { margin-top: 15px; padding: 5px 15px; }
-    .save-top { margin-left: 20px; padding: 10px 20px; border-radius: 12px; background-color: #28a745; color: white; border: none; cursor: pointer; font-weight: bold; font-size: 1em; }
-    .save-top:hover { background-color: #218838; }
+    .container { max-width: 400px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; background: #f9f9f9; }
+    label { display: block; margin-top: 10px; }
+    select, textarea, button { width: 100%; margin-top: 5px; padding: 8px; }
+    button { border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .save-btn { background: #28a745; color: white; margin-top: 10px; }
+    .save-btn:hover { background: #218838; }
 </style>
 </head>
 <body>
@@ -30,99 +29,73 @@
 <div class="fixed-summary">
     <h2>Status Summary:</h2>
     {% for status, count in counts.items() %}
-        <div class="status-item" onclick="showCategory('{{status}}')">
+        <div class="status-item">
             <strong data-status="{{status}}">{{status}}</strong>: <span id="count-{{status}}">{{count}}</span>
         </div>
     {% endfor %}
-    <button class="save-top" onclick="saveChanges()">SAVE</button>
-    <button class="save-top" onclick="window.location.href='/history'">HISTORY</button>
-    <button class="save-top" onclick="window.location.href='/report'">REPORT</button>
+    <button class="save-btn" onclick="saveCart()">SAVE</button>
+    <button class="save-btn" onclick="window.location.href='/history'">HISTORY</button>
+    <button class="save-btn" onclick="window.location.href='/report'">REPORT</button>
+    <button class="save-btn" onclick="window.location.href='/logout'">LOGOUT</button>
 </div>
 
-<form id="cart-form" method="POST">
-    {% for cart in carts %}
-        <div class="cart">
-            <h3>{{cart}}</h3>
-            <label>Status: </label>
-            <select name="status_{{cart}}">
-                {% for option in status_options %}
-                    <option value="{{option}}" {% if cart_states[cart]['status'] == option %}selected{% endif %}>{{option}}</option>
-                {% endfor %}
-            </select>
-            <br><br>
-            <label>Comment:</label><br>
-            <textarea name="comment_{{cart}}">{{cart_states[cart]['comment']}}</textarea>
-        </div>
-    {% endfor %}
-</form>
+<div class="container">
+    <label for="cart">Seleccionar Carrito:</label>
+    <select id="cart" onchange="loadCart()">
+        {% for cart in carts %}
+            <option value="{{cart}}">{{cart}}</option>
+        {% endfor %}
+    </select>
 
-<div id="category-modal" class="modal">
-    <div class="modal-content">
-        <h3 id="modal-title"></h3>
-        <ul id="modal-list"></ul>
-        <button onclick="closeModal()">OK</button>
-    </div>
+    <label for="status">Status:</label>
+    <select id="status">
+        {% for option in status_options %}
+            <option value="{{option}}">{{option}}</option>
+        {% endfor %}
+    </select>
+
+    <label for="comment">Comment:</label>
+    <textarea id="comment"></textarea>
 </div>
 
 <script>
-function showCategory(status) {
-    fetch(`/category/${status}`)
-    .then(response => response.json())
+function loadCart() {
+    const cart = document.getElementById("cart").value;
+    fetch(`/cart/${cart}`)
+    .then(res => res.json())
     .then(data => {
-        document.getElementById('modal-title').innerText = `SunCarts ${status}:`;
-        const list = document.getElementById('modal-list');
-        list.innerHTML = '';
-        data.forEach(cart => {
-            const li = document.createElement('li');
-            li.innerText = cart;
-            list.appendChild(li);
-        });
-        document.getElementById('category-modal').style.display = 'block';
+        document.getElementById("status").value = data.status;
+        document.getElementById("comment").value = data.comment;
     });
 }
 
-function closeModal() {
-    document.getElementById('category-modal').style.display = 'none';
-}
+function saveCart() {
+    const cart = document.getElementById("cart").value;
+    const status = document.getElementById("status").value;
+    const comment = document.getElementById("comment").value;
 
-function saveChanges() {
-    const form = document.getElementById('cart-form');
-    fetch('/', { 
-        method: 'POST', 
-        body: new FormData(form),
-        headers: { "X-Requested-With": "fetch" }
-    })
-    .then(response => response.json())
+    const formData = new FormData();
+    formData.append("cart", cart);
+    formData.append("status", status);
+    formData.append("comment", comment);
+
+    fetch("/update_cart", { method: "POST", body: formData })
+    .then(res => res.json())
     .then(data => {
         if (data.success) {
-            // actualizar conteos
             for (const [status, count] of Object.entries(data.counts)) {
                 const el = document.getElementById(`count-${status}`);
                 if (el) el.textContent = count;
             }
-            showSaveConfirmation("Changes saved!", true);
+            alert("Changes saved!");
         } else {
-            showSaveConfirmation("Error saving changes!", false);
+            alert("Error saving changes!");
         }
-    })
-    .catch(() => showSaveConfirmation("Error saving changes!", false));
+    });
 }
 
-function showSaveConfirmation(message, success) {
-    const modal = document.createElement('div');
-    modal.style.position = 'fixed';
-    modal.style.top = '20px';
-    modal.style.left = '50%';
-    modal.style.transform = 'translateX(-50%)';
-    modal.style.backgroundColor = success ? '#28a745' : '#dc3545';
-    modal.style.color = 'white';
-    modal.style.padding = '10px 20px';
-    modal.style.borderRadius = '8px';
-    modal.style.zIndex = 3000;
-    modal.innerText = message;
-    document.body.appendChild(modal);
-    setTimeout(() => document.body.removeChild(modal), 3000);
-}
+// cargar datos iniciales del primer carrito
+loadCart();
 </script>
 </body>
 </html>
