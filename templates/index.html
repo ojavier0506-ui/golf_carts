@@ -31,7 +31,7 @@
     <h2>Status Summary:</h2>
     {% for status, count in counts.items() %}
         <div class="status-item" onclick="showCategory('{{status}}')">
-            <strong>{{status}}</strong>: {{count}}
+            <strong data-status="{{status}}">{{status}}</strong>: <span id="count-{{status}}">{{count}}</span>
         </div>
     {% endfor %}
     <button class="save-top" onclick="saveChanges()">SAVE</button>
@@ -87,11 +87,25 @@ function closeModal() {
 
 function saveChanges() {
     const form = document.getElementById('cart-form');
-    fetch('/', { method: 'POST', body: new FormData(form) })
-    .then(response => {
-        if(response.ok) showSaveConfirmation("Changes saved!", true);
-        else showSaveConfirmation("Error saving changes!", false);
-    }).catch(() => showSaveConfirmation("Error saving changes!", false));
+    fetch('/', { 
+        method: 'POST', 
+        body: new FormData(form),
+        headers: { "X-Requested-With": "fetch" }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // actualizar conteos
+            for (const [status, count] of Object.entries(data.counts)) {
+                const el = document.getElementById(`count-${status}`);
+                if (el) el.textContent = count;
+            }
+            showSaveConfirmation("Changes saved!", true);
+        } else {
+            showSaveConfirmation("Error saving changes!", false);
+        }
+    })
+    .catch(() => showSaveConfirmation("Error saving changes!", false));
 }
 
 function showSaveConfirmation(message, success) {
