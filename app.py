@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import json
 import os
 from datetime import datetime
-from zoneinfo import ZoneInfo  # Para usar hora local
 from io import BytesIO
 from fpdf import FPDF
 
@@ -22,13 +21,13 @@ status_options = [
     "Other"
 ]
 
-# Archivos de datos
+# Archivos persistentes
 PERSISTENT_PATH = "/persistent"
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
-HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
+LOG_FILE = os.path.join(PERSISTENT_PATH, "history.json")
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Cargar o crear datos
+# Cargar estado inicial
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
@@ -37,13 +36,15 @@ else:
     with open(DATA_FILE, "w") as f:
         json.dump(cart_states, f)
 
-if os.path.exists(HISTORY_FILE):
-    with open(HISTORY_FILE, "r") as f:
-        history_log = json.load(f)
+# Cargar historial
+if os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "r") as f:
+        history = json.load(f)
 else:
-    history_log = {cart: [] for cart in carts}
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history_log, f)
+    history = []
+    with open(LOG_FILE, "w") as f:
+        json.dump(history, f)
+
 
 # --- LOGIN ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -51,68 +52,29 @@ def login():
     if request.method == 'POST':
         username = request.form.get("username")
         password = request.form.get("password")
+
         if username == "Oscar" and password == "3280":
             session['logged_in'] = True
             return redirect(url_for("index"))
         else:
             return render_template("login.html", error="Invalid credentials")
+
     return render_template("login.html")
+
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# --- APP PRINCIPAL ---
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    global cart_states, history_log
 
+# --- PÁGINA PRINCIPAL ---
+@app.route('/')
+def index():
     if not session.get('logged_in'):
         return redirect(url_for("login"))
 
-    if request.method == 'POST':
-        for cart in carts:
-            status = request.form.get(f"status_{cart}")
-            comment = request.form.get(f"comment_{cart}", "")
-
-            if status not in status_options:
-                status = "Unassigned"
-
-            # Guardar cambios en el historial
-            now = datetime.now(ZoneInfo("America/New_York"))
-            old_status = cart_states[cart]["status"]
-            old_comment = cart_states[cart]["comment"]
-
-            if old_status != status:
-                history_log[cart].append({
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "change_type": "Status changed",
-                    "old_value": old_status,
-                    "new_value": status,
-                    "comment": comment
-                })
-
-            if old_comment != comment:
-                history_log[cart].append({
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "change_type": "Comment updated",
-                    "old_value": old_comment,
-                    "new_value": comment,
-                    "comment": comment
-                })
-
-            cart_states[cart]["status"] = status
-            cart_states[cart]["comment"] = comment[:200]
-
-        # Guardar archivos
-        with open(DATA_FILE, "w") as f:
-            json.dump(cart_states, f)
-        with open(HISTORY_FILE, "w") as f:
-            json.dump(history_log, f)
-
+    # Contar carritos en cada categoría
     counts = {option: 0 for option in status_options}
     for cart in carts:
         state = cart_states[cart]["status"]
@@ -124,27 +86,56 @@ def index():
     return render_template("index.html", carts=carts, status_options=status_options,
                            cart_states=cart_states, counts=counts)
 
-# --- CATEGORY AJAX ---
-@app.route('/category/<status>')
-def category(status):
-    if not session.get('logged_in'):
-        return jsonify([])
-    result = [cart for cart in carts if cart_states[cart]["status"] == status]
-    return jsonify(result)
 
-# --- HISTORY PAGE ---
-@app.route('/history')
-def history():
+# --- ACTUALIZAR SOLO UN CARRITO ---
+@app.route('/update_cart', methods=['POST'])
+def update_cart():
     if not session.get('logged_in'):
-        return redirect(url_for("login"))
-    return render_template("history.html", carts=carts)
+        return jsonify({"error": "Not logged in"}), 403
 
-# --- GET HISTORY AJAX ---
-@app.route('/history/<cart_name>')
-def get_cart_history(cart_name):
-    if not session.get('logged_in'):
-        return jsonify([])
-    return jsonify(history_log.get(cart_name, []))
+    cart = request.form.get("cart")
+    status = request.form.get("status")
+    comment = request.form.get("comment", "")
+
+    if cart not in carts:
+        return jsonify({"error": "Invalid cart"}), 400
+
+    if status not in status_options:
+        status = "Unassigned"
+
+    old_status = cart_states[cart]["status"]
+    old_comment = cart_states[cart]["comment"]
+
+    cart_states[cart]["status"] = status
+    cart_states[cart]["comment"] = comment[:200]
+
+    # Guardar cambios
+    with open(DATA_FILE, "w") as f:
+        json.dump(cart_states, f)
+
+    # Guardar log
+    change = {}
+    if old_status != status:
+        change["status_change"] = f"{old_status} → {status}"
+    if old_comment != comment:
+        change["comment_change"] = f"{old_comment} → {comment}"
+
+    if change:
+        history.append({
+            "cart": cart,
+            "datetime": datetime.now().isoformat(),
+            "changes": change
+        })
+        with open(LOG_FILE, "w") as f:
+            json.dump(history, f)
+
+    # Recalcular conteo
+    counts = {option: 0 for option in status_options}
+    for c in carts:
+        counts[cart_states[c]["status"]] += 1
+
+    return jsonify({"success": True, "counts": counts})
+
 
 # --- REPORT PDF ---
 @app.route('/report')
@@ -155,41 +146,74 @@ def report():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "SunCart Report", ln=True, align="C")
-    pdf.ln(10)
+    pdf.cell(200, 10, "SunCarts Report", ln=True, align="C")
 
-    # Conteo por categoría
+    # Resumen
+    pdf.set_font("Arial", "", 12)
     counts = {option: 0 for option in status_options}
     for cart in carts:
         counts[cart_states[cart]["status"]] += 1
 
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, "Cart counts by category:", ln=True)
+    pdf.ln(10)
+    pdf.cell(200, 10, "Summary:", ln=True)
     for status, count in counts.items():
-        pdf.cell(0, 8, f"{status}: {count}", ln=True)
-    pdf.ln(5)
+        pdf.cell(200, 10, f"{status}: {count}", ln=True)
 
     # Tabla de carritos
+    pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(50, 8, "Cart", 1)
-    pdf.cell(50, 8, "Status", 1)
-    pdf.cell(90, 8, "Comment", 1, ln=True)
+    pdf.cell(60, 10, "Cart", 1)
+    pdf.cell(60, 10, "Status", 1)
+    pdf.cell(70, 10, "Comment", 1, ln=True)
 
-    pdf.set_font("Arial", "", 12)
+    pdf.set_font("Arial", "", 10)
     for cart in carts:
-        pdf.cell(50, 8, cart, 1)
-        pdf.cell(50, 8, cart_states[cart]["status"], 1)
-        comment = cart_states[cart]["comment"][:50]
-        pdf.cell(90, 8, comment, 1, ln=True)
+        pdf.cell(60, 10, cart, 1)
+        pdf.cell(60, 10, cart_states[cart]["status"], 1)
+        comment = cart_states[cart]["comment"][:40]
+        pdf.cell(70, 10, comment, 1, ln=True)
 
-    # Crear nombre con solo la fecha local de Orlando/Cuba
-    now = datetime.now(ZoneInfo("America/New_York"))
-    filename = now.strftime("SunCarts_%Y-%m-%d.pdf")
+    buffer = BytesIO()
+    pdf.output(buffer, "F")
+    buffer.seek(0)
 
-    # Guardar en BytesIO y enviar
-    pdf_bytes = BytesIO(pdf.output(dest='S').encode('latin1'))
-    pdf_bytes.seek(0)
-    return send_file(pdf_bytes, download_name=filename, as_attachment=True)
+    filename = f"SunCarts_{datetime.now().strftime('%Y-%m-%d')}.pdf"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype="application/pdf")
+
+
+# --- CATEGORY FILTER (para el modal) ---
+@app.route('/category/<status>')
+def category(status):
+    if not session.get('logged_in'):
+        return jsonify([])
+    result = [cart for cart in carts if cart_states[cart]["status"] == status]
+    return jsonify(result)
+
+
+# --- HISTORIAL ---
+@app.route('/history')
+def history_page():
+    if not session.get('logged_in'):
+        return redirect(url_for("login"))
+    return render_template("history.html", carts=carts)
+
+
+@app.route('/get_history')
+def get_history():
+    if not session.get('logged_in'):
+        return jsonify([])
+    cart = request.args.get("cart")
+    date = request.args.get("date")
+    result = []
+
+    for entry in history:
+        if cart and entry["cart"] != cart:
+            continue
+        if date and not entry["datetime"].startswith(date):
+            continue
+        result.append(entry)
+    return jsonify(result)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
