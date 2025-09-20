@@ -1,10 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
-from datetime import datetime
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
 import json
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo  # Para usar hora local
+from io import BytesIO
 from fpdf import FPDF
-import io
-import pytz
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key"
@@ -22,13 +22,13 @@ status_options = [
     "Other"
 ]
 
-# Archivos persistentes
+# Archivos de datos
 PERSISTENT_PATH = "/persistent"
-os.makedirs(PERSISTENT_PATH, exist_ok=True)
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
 HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
+os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
-# Cargar datos
+# Cargar o crear datos
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r") as f:
         cart_states = json.load(f)
@@ -39,19 +39,19 @@ else:
 
 if os.path.exists(HISTORY_FILE):
     with open(HISTORY_FILE, "r") as f:
-        history_data = json.load(f)
+        history_log = json.load(f)
 else:
-    history_data = []
+    history_log = {cart: [] for cart in carts}
     with open(HISTORY_FILE, "w") as f:
-        json.dump(history_data, f)
+        json.dump(history_log, f)
 
 # --- LOGIN ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get("username").strip()
-        password = request.form.get("password").strip()
-        if username.lower() == "oscar" and password == "3280":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        if username == "Oscar" and password == "3280":
             session['logged_in'] = True
             return redirect(url_for("index"))
         else:
@@ -66,44 +66,52 @@ def logout():
 # --- APP PRINCIPAL ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global cart_states, history_data
+    global cart_states, history_log
 
     if not session.get('logged_in'):
         return redirect(url_for("login"))
 
     if request.method == 'POST':
-        cart = request.form.get("selected_cart")
-        status = request.form.get("status")
-        comment = request.form.get("comment", "")[:200]
+        for cart in carts:
+            status = request.form.get(f"status_{cart}")
+            comment = request.form.get(f"comment_{cart}", "")
 
-        # Guardar historial si hay cambios
-        old_status = cart_states[cart]["status"]
-        old_comment = cart_states[cart]["comment"]
-        changes = []
+            if status not in status_options:
+                status = "Unassigned"
 
-        if status != old_status:
-            changes.append({"change_type": "Status Change", "from": old_status, "to": status})
-        if comment != old_comment:
-            changes.append({"change_type": "Comment Change", "from": old_comment, "to": comment})
+            # Guardar cambios en el historial
+            now = datetime.now(ZoneInfo("America/New_York"))
+            old_status = cart_states[cart]["status"]
+            old_comment = cart_states[cart]["comment"]
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        for c in changes:
-            history_data.append({
-                "cart": cart,
-                "timestamp": timestamp,
-                "change": c["change_type"],
-                "from": c["from"],
-                "to": c["to"]
-            })
+            if old_status != status:
+                history_log[cart].append({
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M:%S"),
+                    "change_type": "Status changed",
+                    "old_value": old_status,
+                    "new_value": status,
+                    "comment": comment
+                })
 
-        cart_states[cart]["status"] = status
-        cart_states[cart]["comment"] = comment
+            if old_comment != comment:
+                history_log[cart].append({
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M:%S"),
+                    "change_type": "Comment updated",
+                    "old_value": old_comment,
+                    "new_value": comment,
+                    "comment": comment
+                })
 
-        # Guardar en disco
+            cart_states[cart]["status"] = status
+            cart_states[cart]["comment"] = comment[:200]
+
+        # Guardar archivos
         with open(DATA_FILE, "w") as f:
             json.dump(cart_states, f)
         with open(HISTORY_FILE, "w") as f:
-            json.dump(history_data, f)
+            json.dump(history_log, f)
 
     counts = {option: 0 for option in status_options}
     for cart in carts:
@@ -113,33 +121,32 @@ def index():
             cart_states[cart]["status"] = state
         counts[state] += 1
 
-    return render_template("index.html", carts=carts, cart_states=cart_states,
-                           status_options=status_options, counts=counts)
+    return render_template("index.html", carts=carts, status_options=status_options,
+                           cart_states=cart_states, counts=counts)
 
-# --- Historial ---
-@app.route('/history', methods=['GET', 'POST'])
+# --- CATEGORY AJAX ---
+@app.route('/category/<status>')
+def category(status):
+    if not session.get('logged_in'):
+        return jsonify([])
+    result = [cart for cart in carts if cart_states[cart]["status"] == status]
+    return jsonify(result)
+
+# --- HISTORY PAGE ---
+@app.route('/history')
 def history():
     if not session.get('logged_in'):
         return redirect(url_for("login"))
+    return render_template("history.html", carts=carts)
 
-    selected_cart = None
-    selected_date = None
-    filtered_history = []
+# --- GET HISTORY AJAX ---
+@app.route('/history/<cart_name>')
+def get_cart_history(cart_name):
+    if not session.get('logged_in'):
+        return jsonify([])
+    return jsonify(history_log.get(cart_name, []))
 
-    if request.method == 'POST':
-        selected_cart = request.form.get("cart_filter")
-        selected_date = request.form.get("date_filter")
-        for h in history_data:
-            if (not selected_cart or h["cart"] == selected_cart) and \
-               (not selected_date or h["timestamp"].startswith(selected_date)):
-                filtered_history.append(h)
-
-    return render_template("history.html", carts=carts,
-                           history=filtered_history,
-                           selected_cart=selected_cart,
-                           selected_date=selected_date)
-
-# --- PDF Report ---
+# --- REPORT PDF ---
 @app.route('/report')
 def report():
     if not session.get('logged_in'):
@@ -147,20 +154,24 @@ def report():
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "SunCarts Report", ln=True, align="C")
-    pdf.ln(5)
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "SunCart Report", ln=True, align="C")
+    pdf.ln(10)
 
-    # Conteo por estado
+    # Conteo por categoría
+    counts = {option: 0 for option in status_options}
+    for cart in carts:
+        counts[cart_states[cart]["status"]] += 1
+
     pdf.set_font("Arial", "", 12)
-    for status in status_options:
-        count = sum(1 for c in carts if cart_states[c]["status"] == status)
+    pdf.cell(0, 8, "Cart counts by category:", ln=True)
+    for status, count in counts.items():
         pdf.cell(0, 8, f"{status}: {count}", ln=True)
     pdf.ln(5)
 
     # Tabla de carritos
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(50, 8, "Carrito", 1)
+    pdf.cell(50, 8, "Cart", 1)
     pdf.cell(50, 8, "Status", 1)
     pdf.cell(90, 8, "Comment", 1, ln=True)
 
@@ -168,18 +179,17 @@ def report():
     for cart in carts:
         pdf.cell(50, 8, cart, 1)
         pdf.cell(50, 8, cart_states[cart]["status"], 1)
-        comment = cart_states[cart]["comment"][:45]  # Ajustar ancho
+        comment = cart_states[cart]["comment"][:50]
         pdf.cell(90, 8, comment, 1, ln=True)
 
-    # Nombre con fecha actual
-    tz = pytz.timezone("America/New_York")
-    filename = f"SunCarts_{datetime.now(tz).strftime('%Y-%m-%d')}.pdf"
+    # Crear nombre con solo la fecha local de Orlando/Cuba
+    now = datetime.now(ZoneInfo("America/New_York"))
+    filename = now.strftime("SunCarts_%Y-%m-%d.pdf")
 
-    output = io.BytesIO()
-    pdf.output(output)
-    output.seek(0)
-
-    return send_file(output, download_name=filename, as_attachment=True)
+    # Guardar en BytesIO y enviar
+    pdf_bytes = BytesIO(pdf.output(dest='S').encode('latin1'))
+    pdf_bytes.seek(0)
+    return send_file(pdf_bytes, download_name=filename, as_attachment=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
