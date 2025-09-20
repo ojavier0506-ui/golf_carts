@@ -1,129 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Golf Cart Tracker</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        textarea { width: 100%; height: 60px; }
-
-        .fixed-summary {
-            position: fixed; top: 0; left: 0; right: 0;
-            background: #f4f4f4; padding: 10px 20px;
-            border-bottom: 2px solid #ccc; z-index: 1000;
-            display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-        }
-        .status-item { background: #ff9800; color: white; padding: 5px 12px;
-            border-radius: 12px; font-weight: bold; cursor: pointer; }
-        .status-item:hover { background: #e68900; }
-        body { margin-top: 150px; }
-        .save-top, .history-top, .report-top {
-            margin-left: 10px; padding: 10px 20px; border-radius: 12px;
-            border: none; cursor: pointer; font-weight: bold; font-size: 1em;
-        }
-        .save-top { background: #28a745; color: white; }
-        .history-top { background: #007bff; color: white; }
-        .report-top { background: #6f42c1; color: white; }
-    </style>
+<meta charset="UTF-8">
+<title>Golf Cart Tracker</title>
+<style>
+body { font-family: Arial; margin:20px;}
+select, textarea {width:100%; margin:5px 0;}
+button {padding:8px 12px; margin-top:10px;}
+</style>
 </head>
 <body>
-    <h1>Golf Cart Tracker</h1>
+<h1>Golf Cart Tracker</h1>
 
-    <div class="fixed-summary">
-        <h2>Status Summary:</h2>
-        {% for status, count in counts.items() %}
-            <div class="status-item" onclick="showCategory('{{status}}')">
-                <strong>{{status}}</strong>: {{count}}
-            </div>
+<form method="POST">
+    <label>Seleccionar Carrito:</label>
+    <select name="selected_cart" required>
+        {% for cart in carts %}
+            <option value="{{ cart }}">{{ cart }} - {{ cart_states[cart]['status'] }}</option>
         {% endfor %}
-        <button class="save-top" onclick="saveChanges()">SAVE</button>
-        <a href="{{ url_for('history_page') }}"><button class="history-top">History</button></a>
-        <a href="{{ url_for('report') }}"><button class="report-top">Report</button></a>
-    </div>
+    </select>
 
-    <form id="cart-form">
-        <label for="cart">Select Cart:</label>
-        <select id="cart" name="cart" onchange="loadCartData()">
-            {% for cart in carts %}
-                <option value="{{cart}}">{{cart}}</option>
-            {% endfor %}
-        </select>
+    <label>Status:</label>
+    <select name="status">
+        {% for option in status_options %}
+            <option value="{{ option }}">{{ option }}</option>
+        {% endfor %}
+    </select>
 
-        <div id="cart-details" style="margin-top:20px;">
-            <label>Status:</label>
-            <select id="status" name="status">
-                {% for option in status_options %}
-                    <option value="{{option}}">{{option}}</option>
-                {% endfor %}
-            </select>
-            <br><br>
-            <label>Comment:</label><br>
-            <textarea id="comment" name="comment"></textarea>
-        </div>
-    </form>
+    <label>Comment:</label>
+    <textarea name="comment"></textarea>
 
-    <script>
-        const cartStates = {{ cart_states|tojson }};
-        const statusOptions = {{ status_options|tojson }};
+    <button type="submit">Guardar Cambios</button>
+    <a href="{{ url_for('history') }}"><button type="button">History</button></a>
+    <a href="{{ url_for('report') }}"><button type="button">Report</button></a>
+    <a href="{{ url_for('logout') }}"><button type="button">Logout</button></a>
+</form>
 
-        function loadCartData() {
-            const cart = document.getElementById("cart").value;
-            document.getElementById("status").value = cartStates[cart].status;
-            document.getElementById("comment").value = cartStates[cart].comment;
-        }
-        loadCartData();
-
-        function saveChanges() {
-            const form = new FormData(document.getElementById("cart-form"));
-            fetch("/update_cart", {
-                method: "POST",
-                body: form
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    cartStates[form.get("cart")].status = form.get("status");
-                    cartStates[form.get("cart")].comment = form.get("comment");
-                    updateSummary(data.counts);
-                    showMessage("Changes saved successfully!", true);
-                } else {
-                    showMessage("Error saving changes!", false);
-                }
-            });
-        }
-
-        function updateSummary(counts) {
-            const items = document.querySelectorAll(".status-item");
-            items.forEach(item => {
-                const status = item.querySelector("strong").innerText;
-                item.innerHTML = `<strong>${status}</strong>: ${counts[status]}`;
-            });
-        }
-
-        function showMessage(message, success) {
-            const modal = document.createElement("div");
-            modal.style.position = "fixed";
-            modal.style.top = "20px";
-            modal.style.left = "50%";
-            modal.style.transform = "translateX(-50%)";
-            modal.style.backgroundColor = success ? "#28a745" : "#dc3545";
-            modal.style.color = "white";
-            modal.style.padding = "10px 20px";
-            modal.style.borderRadius = "8px";
-            modal.style.zIndex = 3000;
-            modal.innerText = message;
-            document.body.appendChild(modal);
-            setTimeout(() => document.body.removeChild(modal), 3000);
-        }
-
-        function showCategory(status) {
-            fetch(`/category/${status}`)
-            .then(r => r.json())
-            .then(data => {
-                alert(`SunCarts ${status}: \n\n${data.join("\n")}`);
-            });
-        }
-    </script>
+<h3>Resumen de Estados:</h3>
+<ul>
+    {% for status, count in counts.items() %}
+        <li>{{ status }}: {{ count }}</li>
+    {% endfor %}
+</ul>
 </body>
 </html>
