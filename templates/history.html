@@ -4,12 +4,23 @@
 <meta charset="UTF-8">
 <title>SunCart History</title>
 <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
+    body {
+        font-family: Arial, sans-serif; margin: 20px;
+        background: url("/static/fondo.jpg") no-repeat center center fixed;
+        background-size: cover; position: relative;
+    }
+    body::before {
+        content: ""; position: fixed; top:0; left:0; right:0; bottom:0;
+        background-color: rgba(255,255,255,0.6); backdrop-filter: blur(6px);
+        z-index: -1;
+    }
     label { margin-right: 10px; font-weight: bold; }
     select, input[type="date"] { margin-right: 20px; padding: 5px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: rgba(249,249,249,0.9); }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background-color: #f2f2f2; }
+    .back-btn { margin-top: 20px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .back-btn:hover { background: #0056b3; }
 </style>
 </head>
 <body>
@@ -24,6 +35,7 @@
 
 <label>Select Date:</label>
 <input type="date" id="date-select">
+<button class="back-btn" onclick="window.location.href='/'">Back</button>
 
 <table>
     <thead>
@@ -36,8 +48,7 @@
             <th>Comment</th>
         </tr>
     </thead>
-    <tbody id="history-table">
-    </tbody>
+    <tbody id="history-table"></tbody>
 </table>
 
 <script>
@@ -71,8 +82,6 @@ function loadHistory() {
 
 cartSelect.addEventListener('change', loadHistory);
 dateSelect.addEventListener('change', loadHistory);
-
-// Cargar historial inicial
 loadHistory();
 </script>
 </body>
