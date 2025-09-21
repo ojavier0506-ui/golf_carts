@@ -42,7 +42,7 @@
     .button-group {
         display: flex;
         gap: 10px;
-        margin-left: auto; /* empuja los botones a la derecha */
+        margin-left: auto;
     }
 
     .btn {
@@ -67,6 +67,11 @@
 
     .btn.report { background-color: #6f42c1; }
     .btn.report:hover { background-color: #59359c; }
+
+    /* Estilos modal */
+    .modal { display:none; position:fixed; z-index:2000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.4); }
+    .modal-content { background:#fff; margin:10% auto; padding:20px; width:80%; max-width:500px; border-radius:8px; }
+    .modal-content h3 { margin-top:0; }
 </style>
 </head>
 <body>
@@ -75,7 +80,7 @@
 <div class="fixed-summary">
     <h2>Status Summary:</h2>
     {% for status, count in counts.items() %}
-        <div class="status-item">
+        <div class="status-item" onclick="showCategory('{{status}}')">
             <strong data-status="{{status}}">{{status}}</strong>: <span id="count-{{status}}">{{count}}</span>
         </div>
     {% endfor %}
@@ -105,6 +110,15 @@
 
     <label for="comment">Comment:</label>
     <textarea id="comment"></textarea>
+</div>
+
+<!-- Modal para mostrar carritos por categoría -->
+<div id="category-modal" class="modal">
+    <div class="modal-content">
+        <h3 id="modal-title"></h3>
+        <ul id="modal-list"></ul>
+        <button onclick="closeModal()">OK</button>
+    </div>
 </div>
 
 <script>
@@ -141,6 +155,30 @@ function saveCart() {
             alert("Error saving changes!");
         }
     });
+}
+
+// Modal funciones
+function showCategory(status) {
+    fetch(`/category/${status}`)
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('modal-title').innerText = `SunCarts ${status}:`;
+        const list = document.getElementById('modal-list');
+        list.innerHTML = '';
+        if (data.length === 0) {
+            list.innerHTML = '<li>No carts in this category</li>';
+        } else {
+            data.forEach(entry => {
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${entry.cart}</strong> - ${entry.comment || "(no comment)"}`;
+                list.appendChild(li);
+            });
+        }
+        document.getElementById('category-modal').style.display = 'block';
+    });
+}
+function closeModal() {
+    document.getElementById('category-modal').style.display = 'none';
 }
 
 // cargar datos iniciales del primer carrito
