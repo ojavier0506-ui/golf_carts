@@ -141,6 +141,18 @@ def update_cart():
 
     return jsonify({"success": True, "counts": counts})
 
+# --- CATEGORY AJAX ---
+@app.route('/category/<status>')
+def category(status):
+    if not session.get('logged_in'):
+        return jsonify([])
+
+    result = [
+        {"cart": cart, "comment": cart_states[cart]["comment"]}
+        for cart in carts if cart_states[cart]["status"] == status
+    ]
+    return jsonify(result)
+
 # --- HISTORY PAGE ---
 @app.route('/history')
 def history():
