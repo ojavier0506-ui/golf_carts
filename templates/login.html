@@ -1,16 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Login</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding-top: 100px; }
-        form { display: inline-block; padding: 20px; border: 1px solid #ccc; border-radius: 10px; }
-        input { display: block; margin: 10px auto; padding: 8px; width: 200px; }
-        button { padding: 10px 20px; background: green; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        button:hover { background-color: darkgreen; }
-        .error { color: red; margin-top: 10px; }
-    </style>
+<meta charset="UTF-8">
+<title>Login</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        text-align: center; padding-top: 100px;
+        background: url("/static/fondo.jpg") no-repeat center center fixed;
+        background-size: cover; position: relative;
+    }
+    body::before {
+        content: ""; position: fixed; top:0; left:0; right:0; bottom:0;
+        background-color: rgba(255,255,255,0.6); backdrop-filter: blur(6px);
+        z-index: -1;
+    }
+    form { display: inline-block; padding: 20px; border: 1px solid #ccc; border-radius: 10px; background: rgba(249,249,249,0.9); }
+    input { display: block; margin: 10px auto; padding: 8px; width: 200px; }
+    button { padding: 10px 20px; background: green; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    button:hover { background-color: darkgreen; }
+    .error { color: red; margin-top: 10px; }
+</style>
 </head>
 <body>
     <h2>Login</h2>
