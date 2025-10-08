@@ -21,6 +21,8 @@ status_options = [
     "Ready for Walk up",
     "Being used by Guest",
     "Out of Service",
+    "Returned",               
+    "Reserved for Pick-Up",
     "Other"
 ]
 
