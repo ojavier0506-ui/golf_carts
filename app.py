@@ -28,11 +28,10 @@ status_options = [
 PERSISTENT_PATH = "/persistent"
 DATA_FILE = os.path.join(PERSISTENT_PATH, "data.json")
 HISTORY_FILE = os.path.join(PERSISTENT_PATH, "history.json")
-USERS_FILE = os.path.join(PERSISTENT_PATH, "users.json")  # <-- usuarios
+USERS_FILE = os.path.join(PERSISTENT_PATH, "users.json")
 os.makedirs(PERSISTENT_PATH, exist_ok=True)
 
 def atomic_write_json(path, obj):
-    # Escritura segura para evitar corrupción
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False)
@@ -56,20 +55,19 @@ else:
     history_log = {cart: [] for cart in carts}
     atomic_write_json(HISTORY_FILE, history_log)
 
-# Cargar/crear usuarios (crear admin por defecto)
+# Cargar/crear usuarios (seed admin)
 def load_or_seed_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    # Semilla: usuario admin "Oscar" / "3280"
-    users = {
+    users_seed = {
         "Oscar": {
             "password_hash": generate_password_hash("3280"),
             "role": "admin"
         }
     }
-    atomic_write_json(USERS_FILE, users)
-    return users
+    atomic_write_json(USERS_FILE, users_seed)
+    return users_seed
 
 users = load_or_seed_users()
 
@@ -154,7 +152,7 @@ def update_cart():
     now = datetime.now(ZoneInfo("America/New_York"))
     old_status = cart_states[cart]["status"]
     old_comment = cart_states[cart]["comment"]
-    actor = session.get("username", "Unknown")  # <-- quién hizo el cambio
+    actor = session.get("username", "Unknown")
 
     if old_status != status:
         history_log[cart].append({
@@ -255,8 +253,6 @@ def report():
 @app.route('/admin/users', methods=['GET'])
 @admin_required
 def admin_users():
-    # Enviamos una lista simple para renderizar
-    # Estructura: {username: {role, password_hash}}
     return render_template("admin_users.html", users=users)
 
 @app.route('/admin/users', methods=['POST'])
@@ -265,16 +261,21 @@ def admin_users_post():
     global users
 
     action = request.form.get("action")
+
     if action == "add":
         new_username = (request.form.get("username") or "").strip()
         new_password = request.form.get("password") or ""
         role = request.form.get("role") or "user"
+
         if not new_username or not new_password:
             return render_template("admin_users.html", users=users, error="Username and password are required")
+
         if new_username in users:
             return render_template("admin_users.html", users=users, error="User already exists")
+
         if role not in ("admin", "user"):
             role = "user"
+
         users[new_username] = {
             "password_hash": generate_password_hash(new_password),
             "role": role
@@ -284,11 +285,9 @@ def admin_users_post():
 
     elif action == "delete":
         del_username = request.form.get("username") or ""
-        # Evitar que el último admin se borre y te quedes sin admin
         if del_username in users:
             if del_username == session.get("username"):
                 return render_template("admin_users.html", users=users, error="You cannot delete yourself while logged in.")
-            # Checar si es el último admin
             admins = [u for u, info in users.items() if info.get("role") == "admin"]
             if users[del_username].get("role") == "admin" and len(admins) <= 1:
                 return render_template("admin_users.html", users=users, error="At least one admin is required.")
@@ -296,10 +295,59 @@ def admin_users_post():
             atomic_write_json(USERS_FILE, users)
         return redirect(url_for("admin_users"))
 
+    elif action == "edit":
+        old_username = (request.form.get("old_username") or "").strip()
+        new_username = (request.form.get("username") or "").strip()
+        new_password = request.form.get("password") or ""
+        role = request.form.get("role") or "user"
+
+        if old_username not in users:
+            return render_template("admin_users.html", users=users, error="Original user not found")
+
+        if not new_username:
+            return render_template("admin_users.html", users=users, error="Username cannot be empty")
+
+        # Si cambia de admin a user, verificar que no sea el último admin
+        if users[old_username].get("role") == "admin" and role != "admin":
+            admins = [u for u, info in users.items() if info.get("role") == "admin"]
+            # Si el único admin es old_username
+            if len(admins) <= 1:
+                return render_template("admin_users.html", users=users, error="At least one admin must remain.")
+
+        # Si cambia el nombre y ya existe otro con ese nombre
+        if new_username != old_username and new_username in users:
+            return render_template("admin_users.html", users=users, error="Another user already has that username")
+
+        # Construir el nuevo registro
+        updated = {
+            "password_hash": users[old_username]["password_hash"],
+            "role": role if role in ("admin", "user") else users[old_username].get("role", "user")
+        }
+        # Cambiar contraseña si se proporcionó
+        if new_password:
+            updated["password_hash"] = generate_password_hash(new_password)
+
+        # Si el username cambió: crear la nueva entrada y borrar la anterior
+        if new_username != old_username:
+            users[new_username] = updated
+            del users[old_username]
+
+            # Si el usuario editado es el que está logueado, actualizar la sesión
+            if session.get("username") == old_username:
+                session["username"] = new_username
+                session["role"] = updated["role"]
+        else:
+            # Solo actualizar los campos del mismo usuario
+            users[old_username] = updated
+            if session.get("username") == old_username:
+                session["role"] = updated["role"]
+
+        atomic_write_json(USERS_FILE, users)
+        return redirect(url_for("admin_users"))
+
     else:
         return render_template("admin_users.html", users=users, error="Invalid action")
 
-# Error 403 bonito
 @app.errorhandler(403)
 def forbidden(_):
     return render_template("login.html", error="Forbidden: admin only"), 403
