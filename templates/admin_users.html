@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin • Users</title>
+<link rel="icon" type="image/svg+xml" href="/static/spiral-main.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    body {
+        font-family: Arial, sans-serif; margin: 20px;
+        background: url("/static/fondo.jpg") no-repeat center center fixed;
+        background-size: cover; position: relative;
+    }
+    body::before {
+        content: ""; position: fixed; top:0; left:0; right:0; bottom:0;
+        background-color: rgba(255,255,255,0.6); backdrop-filter: blur(6px);
+        z-index: -1;
+    }
+    h1 { margin-top: 0; }
+    .container { max-width: 700px; margin: auto; background: rgba(249,249,249,0.93); padding: 20px; border-radius: 8px; border: 1px solid #ccc; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    label { font-weight: bold; }
+    input, select { padding: 8px; }
+    .btn { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff; }
+    .btn-add { background: #28a745; }
+    .btn-add:hover { background: #218838; }
+    .btn-del { background: #dc3545; }
+    .btn-del:hover { background: #b02a37; }
+    .btn-back { background: #007bff; }
+    .btn-back:hover { background: #0056b3; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+    .error { color: #b02a37; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Admin • Users</h1>
+
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" class="row" style="margin-bottom: 12px;">
+        <input type="hidden" name="action" value="add">
+        <div class="row" style="flex:1;">
+            <div>
+                <label>Username</label><br>
+                <input type="text" name="username" required>
+            </div>
+            <div>
+                <label>Password</label><br>
+                <input type="password" name="password" required>
+            </div>
+            <div>
+                <label>Role</label><br>
+                <select name="role">
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn btn-add" type="submit">Add User</button>
+        <button class="btn btn-back" type="button" onclick="window.location.href='/'">Back</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th style="width:1%; white-space:nowrap;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for uname, info in users.items() %}
+            <tr>
+                <td>{{ uname }}</td>
+                <td>{{ info.role }}</td>
+                <td>
+                    <form method="POST" onsubmit="return confirm('Delete user {{ uname }}?');" style="display:inline;">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="username" value="{{ uname }}">
+                        <button class="btn btn-del" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not users %}
+            <tr><td colspan="3" style="text-align:center; color:#666; font-style:italic;">No users</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
