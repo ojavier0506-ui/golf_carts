@@ -127,11 +127,27 @@ def index():
                            status_options=status_options,
                            counts=counts)
 
-# --- API: Obtener datos de un carrito ---
+# --- API: Obtener datos de un carrito (ahora incluye último cambio) ---
 @app.route('/cart/<cart_name>')
 @login_required
 def get_cart(cart_name):
-    return jsonify(cart_states.get(cart_name, {"status": "Unassigned", "comment": ""}))
+    state = cart_states.get(cart_name, {"status": "Unassigned", "comment": ""})
+    # Buscar el último cambio (si existe) en el historial de ese carrito
+    entries = history_log.get(cart_name, [])
+    last_change = None
+    if entries:
+        last = entries[-1]
+        last_change = {
+            "user": last.get("user", "Unknown"),
+            "date": last.get("date", ""),
+            "time": last.get("time", ""),
+            "change_type": last.get("change_type", "")
+        }
+    return jsonify({
+        "status": state.get("status", "Unassigned"),
+        "comment": state.get("comment", ""),
+        "last_change": last_change
+    })
 
 # --- API: Guardar cambios de un carrito ---
 @app.route('/update_cart', methods=['POST'])
@@ -249,7 +265,7 @@ def report():
     pdf_bytes.seek(0)
     return send_file(pdf_bytes, download_name=filename, as_attachment=True)
 
-# --- ADMIN: Gestión de usuarios ---
+# --- ADMIN (sigue igual que lo tenías) ---
 @app.route('/admin/users', methods=['GET'])
 @admin_required
 def admin_users():
@@ -307,37 +323,28 @@ def admin_users_post():
         if not new_username:
             return render_template("admin_users.html", users=users, error="Username cannot be empty")
 
-        # Si cambia de admin a user, verificar que no sea el último admin
         if users[old_username].get("role") == "admin" and role != "admin":
             admins = [u for u, info in users.items() if info.get("role") == "admin"]
-            # Si el único admin es old_username
             if len(admins) <= 1:
                 return render_template("admin_users.html", users=users, error="At least one admin must remain.")
 
-        # Si cambia el nombre y ya existe otro con ese nombre
         if new_username != old_username and new_username in users:
             return render_template("admin_users.html", users=users, error="Another user already has that username")
 
-        # Construir el nuevo registro
         updated = {
             "password_hash": users[old_username]["password_hash"],
             "role": role if role in ("admin", "user") else users[old_username].get("role", "user")
         }
-        # Cambiar contraseña si se proporcionó
         if new_password:
             updated["password_hash"] = generate_password_hash(new_password)
 
-        # Si el username cambió: crear la nueva entrada y borrar la anterior
         if new_username != old_username:
             users[new_username] = updated
             del users[old_username]
-
-            # Si el usuario editado es el que está logueado, actualizar la sesión
             if session.get("username") == old_username:
                 session["username"] = new_username
                 session["role"] = updated["role"]
         else:
-            # Solo actualizar los campos del mismo usuario
             users[old_username] = updated
             if session.get("username") == old_username:
                 session["role"] = updated["role"]
