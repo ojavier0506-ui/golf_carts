@@ -13,8 +13,6 @@
         background-size: cover;
         position: relative;
     }
-
-    /* Overlay con blur */
     body::before {
         content: "";
         position: fixed;
@@ -30,8 +28,9 @@
         z-index: 1000; display: flex; flex-wrap: wrap; 
         justify-content: flex-start; align-items: center; gap: 10px;
     }
-    .fixed-summary h2 { margin: 0 20px 0 0; font-size: 1.2em; }
+    .fixed-summary h2 { margin: 0 10px 0 0; font-size: 1.2em; }
 
+    .user-badge { margin-left: 10px; font-size: 0.9em; color: #333; }
     .status-item { 
         margin: 0 10px; font-size: 0.95em; 
         cursor: pointer; background-color: #ff9800; 
@@ -56,6 +55,7 @@
 
     .button-group {
         display: flex; gap: 10px; margin-left: auto;
+        align-items: center;
     }
     .btn {
         padding: 8px 16px; border-radius: 6px; border: none;
@@ -70,10 +70,15 @@
     .btn.history:hover { background-color: #e68900; }
     .btn.report { background-color: #6f42c1; }
     .btn.report:hover { background-color: #59359c; }
+    .btn.admin { background-color: #17a2b8; }
+    .btn.admin:hover { background-color: #138496; }
 
-    /* Modal */
     .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
     .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; }
+
+    /* Ítems clicables en el modal */
+    #modal-list li { padding: 6px 8px; background: rgba(0,0,0,0.04); margin-bottom: 6px; border-radius: 6px; cursor: pointer; }
+    #modal-list li:hover { background: rgba(0,0,0,0.08); }
 </style>
 </head>
 <body>
@@ -87,16 +92,21 @@
         </div>
     {% endfor %}
 
+    <span class="user-badge">Logged in as: <strong>{{ session.get('username') }}</strong> ({{ session.get('role') }})</span>
+
     <div class="button-group">
         <button class="btn save" onclick="saveCart()">SAVE</button>
         <button class="btn history" onclick="window.location.href='/history'">HISTORY</button>
         <button class="btn report" onclick="window.location.href='/report'">REPORT</button>
+        {% if session.get('role') == 'admin' %}
+        <button class="btn admin" onclick="window.location.href='/admin/users'">ADMIN</button>
+        {% endif %}
         <button class="btn logout" onclick="window.location.href='/logout'">LOGOUT</button>
     </div>
 </div>
 
 <div class="container">
-    <label for="cart">Select Suncart:</label>
+    <label for="cart">Select SunCart:</label>
     <select id="cart" onchange="loadCart()">
         {% for cart in carts %}
             <option value="{{cart}}">{{cart}}</option>
@@ -119,18 +129,18 @@
   <div class="modal-content">
     <h3 id="modal-title"></h3>
     <ul id="modal-list"></ul>
-    <button onclick="closeModal()">Cerrar</button>
+    <button onclick="closeModal()">Close</button>
   </div>
 </div>
 
 <script>
 function loadCart() {
     const cart = document.getElementById("cart").value;
-    fetch(`/cart/${cart}`)
+    fetch(`/cart/${encodeURIComponent(cart)}`)
     .then(res => res.json())
     .then(data => {
-        document.getElementById("status").value = data.status;
-        document.getElementById("comment").value = data.comment;
+        document.getElementById("status").value = data.status || "Unassigned";
+        document.getElementById("comment").value = data.comment || "";
     });
 }
 
@@ -148,8 +158,8 @@ function saveCart() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            for (const [status, count] of Object.entries(data.counts)) {
-                const el = document.getElementById(`count-${status}`);
+            for (const [st, count] of Object.entries(data.counts)) {
+                const el = document.getElementById(`count-${st}`);
                 if (el) el.textContent = count;
             }
             alert("Changes saved!");
@@ -160,24 +170,44 @@ function saveCart() {
 }
 
 function showCategory(status) {
-    fetch(`/category/${status}`)
+    fetch(`/category/${encodeURIComponent(status)}`)
     .then(res => res.json())
     .then(data => {
         document.getElementById("modal-title").innerText = `SunCarts ${status}:`;
         const list = document.getElementById("modal-list");
         list.innerHTML = '';
-        data.forEach(item => {
+
+        if (!Array.isArray(data) || data.length === 0) {
             const li = document.createElement("li");
-            li.innerText = `${item.cart} - ${item.comment || "(no comment)"}`;
+            li.textContent = "No carts in this category";
             list.appendChild(li);
-        });
+        } else {
+            data.forEach(item => {
+                const li = document.createElement("li");
+                li.innerHTML = `<strong>${item.cart}</strong> - ${item.comment || "(no comment)"}`;
+                li.tabIndex = 0;
+                li.onclick = () => selectCartFromModal(item.cart);
+                li.onkeypress = (e) => { if (e.key === 'Enter' || e.key === ' ') selectCartFromModal(item.cart); };
+                list.appendChild(li);
+            });
+        }
+
         document.getElementById("category-modal").style.display = "block";
     });
 }
+
+function selectCartFromModal(cartName) {
+    const sel = document.getElementById("cart");
+    sel.value = cartName;
+    loadCart();
+    closeModal();
+}
+
 function closeModal() {
     document.getElementById("category-modal").style.display = "none";
 }
 
+// Carga inicial del primer carrito
 loadCart();
 </script>
 </body>
